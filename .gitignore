@@ -1,0 +1,14 @@
+node_modules/
+.env
+.env.local
+dist/
+.next/
+coverage/
+*.log
+server/api/uploads/
+server/aiml/.venv/
+server/aiml/__pycache__/
+client/app/.expo/
+client/app/android/
+test-results/
+playwright-report/

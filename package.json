@@ -1,0 +1,17 @@
+{
+  "name": "bhaav",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*", "server/api", "client/console"],
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "concurrently -n api,console -c blue,magenta \"npm -w @bhaav/api run dev\" \"npm -w @bhaav/console run dev\"",
+    "seed": "npm -w @bhaav/api run seed",
+    "migrate": "npm -w @bhaav/api run migrate",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "vitest": "^2.1.8"
+  }
+}

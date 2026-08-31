@@ -1,0 +1,15 @@
+{
+  "name": "@bhaav/core",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./constants": "./src/constants.js",
+    "./pricing": "./src/pricing.js",
+    "./geo": "./src/geo.js",
+    "./ids": "./src/ids.js",
+    "./ranking": "./src/ranking.js",
+    "./validate": "./src/validate.js"
+  },
+  "scripts": { "test": "vitest run" }
+}
