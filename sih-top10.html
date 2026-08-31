@@ -1,0 +1,1476 @@
+<title>Ten Statements, One Decision</title>
+<!--
+THESIS: A ranking that closes a decision under cross-examination, refusing the AI-dashboard card grid and the score-pill hero.
+OWN-WORLD: Cool paper ground, near-black ink, one slate-blue accent; Archivo caps for structure, Literata for argument, Spline Sans Mono for every number. Flat: borders carry elevation, never shadows.
+STORY: The reader sees the ranking in ten seconds, the reason for each position in two minutes, and the attack on their own pick in ten.
+FIRST VIEWPORT: Title left at 4rem, the decision stated in one sentence beneath it, then the five-row ranking matrix breaking wider than the reading measure &mdash; no hero image, no metric tiles.
+FORM: Category standard played straight (standing exit, user-chosen over the assigned drawing-sheet roll). Seed key bf04dabf.
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Literata:opsz,wght@7..72,400;7..72,500;7..72,600&family=Spline+Sans+Mono:wght@400;500;600&display=swap">
+
+<style>
+:root{
+  --paper:#FBFBFC;
+  --raise:#FFFFFF;
+  --sunk:#F2F3F6;
+  --ink:#0E1116;
+  --ink-2:#3C4453;
+  --muted:#5B6373;
+  --rule:#DFE2E9;
+  --rule-soft:#EAECF1;
+  --accent:#24405E;
+  --accent-tint:#EAEFF6;
+  --go:#1C6B45;
+  --go-tint:#E6F1EA;
+  --hold:#8A6516;
+  --hold-tint:#F6EFDD;
+  --stop:#A43F2E;
+  --stop-tint:#F7E9E5;
+  --bar:#E4E7ED;
+  --shade:#0E1116;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#0C0E12;
+    --raise:#13161C;
+    --sunk:#171B22;
+    --ink:#E9EBEF;
+    --ink-2:#B4BBC7;
+    --muted:#949DAC;
+    --rule:#262B34;
+    --rule-soft:#1D222A;
+    --accent:#9CB8DC;
+    --accent-tint:#15202E;
+    --go:#63C395;
+    --go-tint:#0F2118;
+    --hold:#D3AC5E;
+    --hold-tint:#221B0F;
+    --stop:#E0897A;
+    --stop-tint:#241614;
+    --bar:#252A33;
+    --shade:#000000;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0C0E12;
+  --raise:#13161C;
+  --sunk:#171B22;
+  --ink:#E9EBEF;
+  --ink-2:#B4BBC7;
+  --muted:#949DAC;
+  --rule:#262B34;
+  --rule-soft:#1D222A;
+  --accent:#9CB8DC;
+  --accent-tint:#15202E;
+  --go:#63C395;
+  --go-tint:#0F2118;
+  --hold:#D3AC5E;
+  --hold-tint:#221B0F;
+  --stop:#E0897A;
+  --stop-tint:#241614;
+  --bar:#252A33;
+  --shade:#000000;
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;overflow-x:clip;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:Literata,Georgia,serif;
+  font-size:17px;
+  line-height:1.65;
+  font-optical-sizing:auto;
+  -webkit-font-smoothing:antialiased;
+}
+::selection{background:var(--accent);color:var(--paper)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
+*{scrollbar-width:thin;scrollbar-color:var(--rule) transparent}
+*::-webkit-scrollbar{height:9px;width:9px}
+*::-webkit-scrollbar-thumb{background:var(--rule);border-radius:9px}
+*::-webkit-scrollbar-track{background:transparent}
+
+/* ---------- structure ---------- */
+.page{max-width:1180px;margin:0 auto;padding:0 28px 120px}
+.spine{max-width:68ch}
+
+h1,h2,h3,.lab,.rankno,th{font-family:Archivo,"Helvetica Neue",Arial,sans-serif}
+h1{
+  font-size:clamp(2.6rem,6.2vw,4.4rem);font-weight:700;line-height:.98;
+  letter-spacing:-.035em;margin:0;text-wrap:balance;
+}
+h2{
+  font-size:clamp(1.5rem,2.6vw,2rem);font-weight:600;line-height:1.12;
+  letter-spacing:-.025em;margin:0;text-wrap:balance;
+}
+h3{font-size:1.08rem;font-weight:600;letter-spacing:-.012em;margin:0}
+p{margin:0}
+.lab{
+  font-size:.7rem;font-weight:600;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--muted);
+}
+.mono,.num,td.n,th.n,.code{
+  font-family:"Spline Sans Mono",ui-monospace,SFMono-Regular,monospace;
+  font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;
+}
+
+/* ---------- masthead ---------- */
+header.top{padding:72px 0 0}
+.rule-hair{height:1px;background:var(--rule);border:0;margin:0}
+.deck{
+  font-size:1.24rem;line-height:1.5;color:var(--ink-2);max-width:62ch;margin-top:22px;
+}
+.decision{
+  margin-top:30px;display:flex;flex-wrap:wrap;gap:18px 34px;align-items:flex-end;
+  padding:22px 0 30px;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
+}
+.decision .big{display:flex;flex-direction:column;gap:5px}
+.decision .big .v{
+  font-family:Archivo,sans-serif;font-size:2.1rem;font-weight:700;letter-spacing:-.03em;line-height:1;
+  font-variant-numeric:tabular-nums;
+}
+.decision .big .v.code{font-family:"Spline Sans Mono",monospace;font-size:1.7rem;font-weight:600}
+
+/* ---------- matrix ---------- */
+.scroller{overflow-x:auto;border:1px solid var(--rule);border-radius:14px;background:var(--raise)}
+table{border-collapse:collapse;width:100%;min-width:720px;font-size:.9rem}
+thead th{
+  font-size:.66rem;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);
+  text-align:left;padding:14px 14px 11px;border-bottom:1px solid var(--rule);white-space:nowrap;
+  background:var(--sunk);
+}
+tbody td{padding:14px;border-bottom:1px solid var(--rule-soft);vertical-align:middle}
+tbody tr:last-child td{border-bottom:0}
+tbody tr.dim{color:var(--muted)}
+td.n,th.n{text-align:right;white-space:nowrap}
+.rankno{
+  font-family:"Spline Sans Mono",monospace;font-size:1.5rem;font-weight:600;
+  letter-spacing:-.04em;line-height:1;font-variant-numeric:tabular-nums;
+}
+tr.dim .rankno{color:var(--muted)}
+.ps{font-family:"Spline Sans Mono",monospace;font-size:.8rem;font-weight:500;color:var(--muted);display:block;margin-bottom:2px}
+.nm{font-family:Archivo,sans-serif;font-weight:600;font-size:.95rem;letter-spacing:-.01em}
+.avg{font-family:"Spline Sans Mono",monospace;font-size:1.06rem;font-weight:600;font-variant-numeric:tabular-nums}
+
+/* verdict marks &mdash; drawn, never colour alone */
+.mark{display:inline-flex;align-items:center;gap:7px;font-family:Archivo,sans-serif;font-size:.72rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+.mark svg{flex:0 0 auto;width:15px;height:15px}
+.m-go{color:var(--go)}
+.m-hold{color:var(--accent)}
+.m-stop{color:var(--stop)}
+
+/* score bar */
+.meter{display:flex;align-items:center;gap:10px;min-width:132px}
+.meter .track{position:relative;flex:1;height:5px;background:var(--bar);border-radius:3px;overflow:hidden}
+.meter .track > i{
+  display:block;height:100%;border-radius:3px;background:var(--accent);
+  width:var(--w);transform-origin:left center;
+}
+.meter.go .track > i{background:var(--go)}
+.meter.stop .track > i{background:var(--stop)}
+@keyframes fillbar{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.meter.on .track > i{animation:fillbar .9s cubic-bezier(.16,1,.3,1) both}
+
+/* ---------- sections ---------- */
+section{padding-top:76px}
+.sechead{display:flex;flex-direction:column;gap:12px;padding-bottom:18px;border-bottom:1px solid var(--rule);margin-bottom:30px}
+
+.note{
+  border:1px solid var(--rule);background:var(--sunk);border-radius:14px;
+  padding:20px 22px;display:flex;flex-direction:column;gap:11px;
+}
+.note.warn{background:var(--hold-tint);border-color:color-mix(in srgb,var(--hold) 34%,transparent)}
+.note.good{background:var(--go-tint);border-color:color-mix(in srgb,var(--go) 30%,transparent)}
+.note h3{display:flex;align-items:center;gap:9px}
+.note.warn h3{color:var(--hold)}
+.note.good h3{color:var(--go)}
+.note p{font-size:.97rem;color:var(--ink-2);max-width:70ch}
+
+/* ---------- dossier ---------- */
+.dos{border-top:2px solid var(--ink);padding-top:26px;margin-top:64px}
+.dos.veto{border-top-color:var(--rule);}
+.dos-head{display:grid;grid-template-columns:auto 1fr;gap:22px;align-items:start}
+.dos-rank{
+  font-family:"Spline Sans Mono",monospace;font-size:clamp(2.6rem,7vw,4rem);font-weight:600;
+  line-height:.84;letter-spacing:-.05em;color:var(--ink);font-variant-numeric:tabular-nums;
+}
+.dos.veto .dos-rank{color:var(--muted)}
+.dos-id{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;margin-bottom:9px}
+.dos-meta{display:flex;flex-wrap:wrap;gap:6px 26px;margin-top:14px;font-size:.85rem;color:var(--ink-2)}
+.dos-meta > div{display:flex;flex-direction:column;gap:1px}
+.dos-body{display:flex;flex-direction:column;gap:34px;margin-top:34px}
+.blk{display:flex;flex-direction:column;gap:13px}
+.blk > h3{padding-bottom:8px;border-bottom:1px solid var(--rule-soft)}
+.blk p,.blk li{max-width:70ch}
+
+ul.pts{margin:0;padding-left:19px;display:flex;flex-direction:column;gap:9px;font-size:.97rem;color:var(--ink-2)}
+ul.pts strong{color:var(--ink);font-weight:600}
+ul.pts::marker{color:var(--muted)}
+
+dl.rca{display:grid;grid-template-columns:minmax(96px,auto) 1fr;gap:11px 22px;margin:0;font-size:.97rem}
+dl.rca dt{font-family:Archivo,sans-serif;font-size:.68rem;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);padding-top:5px}
+dl.rca dd{margin:0;color:var(--ink-2);max-width:70ch}
+
+ol.whys{margin:0;padding:0;list-style:none;counter-reset:w}
+ol.whys li{
+  counter-increment:w;display:grid;grid-template-columns:34px 1fr;gap:16px;
+  padding:11px 0;border-bottom:1px solid var(--rule-soft);font-size:.95rem;color:var(--ink-2);
+}
+ol.whys li:last-child{border-bottom:0;color:var(--ink)}
+ol.whys li::before{
+  content:counter(w);font-family:"Spline Sans Mono",monospace;font-size:.86rem;
+  color:var(--muted);padding-top:2px;font-variant-numeric:tabular-nums;
+}
+ol.whys li:last-child::before{color:var(--accent)}
+
+.chain{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:12px;overflow:hidden}
+.chain > div{background:var(--raise);padding:14px 15px;display:flex;flex-direction:column;gap:6px;font-size:.87rem;line-height:1.5;color:var(--ink-2)}
+
+.tag{
+  font-family:Archivo,sans-serif;font-size:.62rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+  padding:2px 6px;border-radius:4px;white-space:nowrap;
+}
+.t-fact{background:var(--go-tint);color:var(--go)}
+.t-inf{background:var(--hold-tint);color:var(--hold)}
+
+.claim{
+  font-family:Archivo,sans-serif;font-size:1.16rem;font-weight:500;line-height:1.38;
+  letter-spacing:-.018em;color:var(--ink);max-width:60ch;
+}
+
+.scores{display:flex;flex-direction:column}
+.srow{display:grid;grid-template-columns:150px 34px 1fr;gap:16px;align-items:center;padding:9px 0;border-bottom:1px solid var(--rule-soft)}
+.srow:last-child{border-bottom:0}
+.srow .cn{font-family:Archivo,sans-serif;font-size:.85rem;font-weight:500}
+.srow .cv{font-family:"Spline Sans Mono",monospace;font-size:.94rem;font-weight:600;text-align:right;font-variant-numeric:tabular-nums}
+.srow .rs{grid-column:1/-1;font-size:.86rem;color:var(--muted);line-height:1.5;max-width:70ch;margin-top:-3px}
+
+.calcbox{
+  font-family:"Spline Sans Mono",monospace;font-size:.79rem;line-height:1.75;color:var(--ink-2);
+  background:var(--sunk);border:1px solid var(--rule);border-radius:12px;padding:15px 17px;
+  overflow-x:auto;white-space:pre;font-variant-numeric:tabular-nums;
+}
+.total{display:flex;align-items:baseline;gap:13px;padding-top:14px;border-top:2px solid var(--ink);margin-top:12px}
+.total .tv{font-family:"Spline Sans Mono",monospace;font-size:2.1rem;font-weight:600;letter-spacing:-.035em;font-variant-numeric:tabular-nums}
+
+/* ---------- rail ---------- */
+.rail{display:none}
+@media (min-width:1120px){
+  .page{display:grid;grid-template-columns:1fr 168px;gap:56px;align-items:start}
+  .page > *{grid-column:1}
+  .rail{
+    display:flex;grid-column:2;grid-row:1/-1;position:sticky;top:34px;
+    flex-direction:column;gap:2px;padding-top:96px;
+  }
+  .rail a{
+    display:grid;grid-template-columns:20px 1fr;gap:9px;align-items:baseline;
+    padding:7px 9px;border-radius:8px;text-decoration:none;color:var(--muted);
+    font-family:Archivo,sans-serif;font-size:.76rem;font-weight:500;line-height:1.3;
+    border-left:1px solid transparent;
+  }
+  .rail a .rn{font-family:"Spline Sans Mono",monospace;font-size:.72rem}
+  .rail a:hover{background:var(--sunk);color:var(--ink-2)}
+  .rail a[aria-current="true"]{background:var(--accent-tint);color:var(--accent);font-weight:600}
+}
+
+/* ---------- plan ---------- */
+.plan{display:flex;flex-direction:column;border:1px solid var(--rule);border-radius:14px;overflow:hidden}
+.plan > div{display:grid;grid-template-columns:112px 1fr;gap:20px;padding:16px 20px;border-bottom:1px solid var(--rule-soft);background:var(--raise)}
+.plan > div:last-child{border-bottom:0}
+.plan .when{font-family:"Spline Sans Mono",monospace;font-size:.79rem;color:var(--accent);font-weight:500;padding-top:2px}
+.plan .what{font-size:.94rem;color:var(--ink-2);max-width:66ch}
+.plan .what b{color:var(--ink);font-weight:600}
+
+footer{margin-top:96px;padding-top:26px;border-top:1px solid var(--rule);font-size:.85rem;color:var(--muted);display:flex;flex-direction:column;gap:12px}
+footer p{max-width:76ch}
+a{color:var(--accent);text-decoration:underline;text-underline-offset:2px;text-decoration-thickness:1px;text-decoration-color:color-mix(in srgb,var(--accent) 42%,transparent)}
+a:hover{text-decoration-color:var(--accent)}
+
+@media (max-width:760px){
+  body{font-size:16px}
+  .page{padding:0 18px 80px}
+  .dos-head{grid-template-columns:1fr;gap:6px}
+  .dos-rank{font-size:2.4rem}
+  .srow{grid-template-columns:1fr 34px}
+  .srow .rs{grid-column:1/-1}
+  .plan > div{grid-template-columns:1fr;gap:5px}
+  dl.rca{grid-template-columns:1fr;gap:3px 0}
+  dl.rca dd{margin-bottom:9px}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+  .meter .track > i{transform:none}
+}
+</style>
+
+<div class="page">
+
+<nav class="rail" aria-label="The ten statements">
+  <a href="#r1"><span class="rn">1</span><span>Kabadiwala Connect</span></a>
+  <a href="#r2"><span class="rn">2</span><span>Patient Case-Taking</span></a>
+  <a href="#r3"><span class="rn">3</span><span>Legal Metrology</span></a>
+  <a href="#r4"><span class="rn">4</span><span>IP-SAKTI</span></a>
+  <a href="#r5"><span class="rn">5</span><span>BIS Assistant</span></a>
+  <a href="#r6"><span class="rn">6</span><span>Dead Reckoning</span></a>
+  <a href="#r7"><span class="rn">7</span><span>Land Records</span></a>
+  <a href="#r8"><span class="rn">8</span><span>MPLADS</span></a>
+  <a href="#r9"><span class="rn">9</span><span>Traffic Detection</span></a>
+  <a href="#r10"><span class="rn">10</span><span>Transit Fleet</span></a>
+</nav>
+
+<header class="top">
+  <h1>Ten statements,<br>one decision.</h1>
+  <p class="deck">All 175 software problem statements in Smart India Hackathon 2026, cut to ten and scored twice &mdash; once on how good the problem is, once on whether <em>this</em> team can win it in the time left. Every pick is attacked before it is recommended.</p>
+
+  <div class="decision">
+    <div class="big">
+      <span class="lab">Commit to</span>
+      <span class="v code">SIH26229</span>
+    </div>
+    <div class="big">
+      <span class="lab">Score</span>
+      <span class="v">4.8<span style="color:var(--muted);font-size:1.1rem">/5</span></span>
+    </div>
+    <div class="big">
+      <span class="lab">Internal round</span>
+      <span class="v">48<span style="color:var(--muted);font-size:1.1rem">h</span></span>
+    </div>
+    <div class="big">
+      <span class="lab">Idea deadline</span>
+      <span class="v">20 Sep</span>
+    </div>
+  </div>
+</header>
+
+<section id="matrix" style="padding-top:44px">
+  <div class="sechead">
+    <h2>The ranking</h2>
+    <p style="color:var(--ink-2);max-width:68ch">Five factors, each scored 0&ndash;5: whether it solves a national-scale problem, whether you can build it in the time available, whether you can be ten times better than the obvious answer, whether the sponsoring body actually adopts what it commissions, and whether your team already has the skills.</p>
+  </div>
+
+  <div class="scroller">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:52px">Rank</th>
+          <th>Problem statement</th>
+          <th class="n">Impact</th>
+          <th class="n">Feasible</th>
+          <th class="n">Different</th>
+          <th class="n">Ministry</th>
+          <th class="n">Team</th>
+          <th class="n">Average</th>
+          <th>Verdict</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="rankno">1</span></td>
+          <td><span class="ps">SIH26229 &middot; Ministry of Mines</span><span class="nm">Kabadiwala Connect</span></td>
+          <td class="n">5</td><td class="n">5</td><td class="n">5</td><td class="n">5</td><td class="n">4</td>
+          <td class="n"><div class="meter go" style="--w:96%"><span class="avg">4.8</span><span class="track"><i></i></span></div></td>
+          <td><span class="mark m-go"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5"/></svg>Commit</span></td>
+        </tr>
+        <tr>
+          <td><span class="rankno">2</span></td>
+          <td><span class="ps">SIH26047 &middot; Ministry of Ayush</span><span class="nm">Patient Case-Taking Software</span></td>
+          <td class="n">5</td><td class="n">3</td><td class="n">4</td><td class="n">4</td><td class="n">4</td>
+          <td class="n"><div class="meter" style="--w:80%"><span class="avg">4.0</span><span class="track"><i></i></span></div></td>
+          <td><span class="mark m-hold"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.5v11M2.5 8h11"/></svg>Alternative</span></td>
+        </tr>
+        <tr>
+          <td><span class="rankno">3</span></td>
+          <td><span class="ps">SIH26034 &middot; Consumer Affairs</span><span class="nm">Legal Metrology compliance</span></td>
+          <td class="n">3</td><td class="n">5</td><td class="n">4</td><td class="n">3</td><td class="n">4</td>
+          <td class="n"><div class="meter" style="--w:76%"><span class="avg">3.8</span><span class="track"><i></i></span></div></td>
+          <td><span class="mark m-hold"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.5v11M2.5 8h11"/></svg>Backup</span></td>
+        </tr>
+        <tr class="dim">
+          <td><span class="rankno">4</span></td>
+          <td><span class="ps">SIH26045 &middot; Ministry of Ayush</span><span class="nm">IP-SAKTI Sahayak</span></td>
+          <td class="n">3</td><td class="n">5</td><td class="n">2</td><td class="n">4</td><td class="n">5</td>
+          <td class="n"><div class="meter stop" style="--w:76%"><span class="avg">3.8</span><span class="track"><i></i></span></div></td>
+          <td><span class="mark m-stop"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>Vetoed</span></td>
+        </tr>
+        <tr class="dim">
+          <td><span class="rankno">5</span></td>
+          <td><span class="ps">SIH26107 &middot; Consumer Affairs</span><span class="nm">BIS Intelligent Assistant</span></td>
+          <td class="n">3</td><td class="n">5</td><td class="n">2</td><td class="n">3</td><td class="n">5</td>
+          <td class="n"><div class="meter stop" style="--w:72%"><span class="avg">3.6</span><span class="track"><i></i></span></div></td>
+          <td><span class="mark m-stop"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>Vetoed</span></td>
+        </tr>
+        <tr class="dim">
+          <td><span class="rankno">6</span></td>
+          <td><span class="ps">SIH26168 &middot; ISRO / Dept. of Space</span><span class="nm">Intelligent Dead Reckoning</span></td>
+          <td class="n">4</td><td class="n">2</td><td class="n">3</td><td class="n">5</td><td class="n">1</td>
+          <td class="n"><div class="meter stop" style="--w:60%"><span class="avg">3.0</span><span class="track"><i></i></span></div></td>
+          <td><span class="mark m-stop"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>Wrong team</span></td>
+        </tr>
+        <tr class="dim">
+          <td><span class="rankno">7</span></td>
+          <td><span class="ps">SIH26018 &middot; Rural Development / DoLR</span><span class="nm">Land record digitization</span></td>
+          <td class="n">4</td><td class="n">3</td><td class="n">2</td><td class="n">4</td><td class="n">2</td>
+          <td class="n"><div class="meter stop" style="--w:60%"><span class="avg">3.0</span><span class="track"><i></i></span></div></td>
+          <td><span class="mark m-stop"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>Model-heavy</span></td>
+        </tr>
+        <tr class="dim">
+          <td><span class="rankno">8</span></td>
+          <td><span class="ps">SIH26102 &middot; MoSPI</span><span class="nm">MPLADS anomaly detection</span></td>
+          <td class="n">4</td><td class="n">2</td><td class="n">3</td><td class="n">3</td><td class="n">3</td>
+          <td class="n"><div class="meter stop" style="--w:60%"><span class="avg">3.0</span><span class="track"><i></i></span></div></td>
+          <td><span class="mark m-stop"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>Data wall</span></td>
+        </tr>
+        <tr class="dim">
+          <td><span class="rankno">9</span></td>
+          <td><span class="ps">SIH26145 &middot; NTRO</span><span class="nm">Unidirectional traffic detection</span></td>
+          <td class="n">3</td><td class="n">3</td><td class="n">3</td><td class="n">3</td><td class="n">2</td>
+          <td class="n"><div class="meter stop" style="--w:56%"><span class="avg">2.8</span><span class="track"><i></i></span></div></td>
+          <td><span class="mark m-stop"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>Skills gap</span></td>
+        </tr>
+        <tr class="dim">
+          <td><span class="rankno">10</span></td>
+          <td><span class="ps">SIH26124 &middot; Bharat Electronics</span><span class="nm">Urban intelligence, transit fleet</span></td>
+          <td class="n">4</td><td class="n">2</td><td class="n">2</td><td class="n">4</td><td class="n">2</td>
+          <td class="n"><div class="meter stop" style="--w:56%"><span class="avg">2.8</span><span class="track"><i></i></span></div></td>
+          <td><span class="mark m-stop"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>No access</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note warn" style="margin-top:26px">
+    <h3><svg viewBox="0 0 16 16" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M8 1.8L15 14H1L8 1.8z"/><path d="M8 6.4v3.4M8 11.8v.1"/></svg>Why ranks 4 to 10 are documented and then refused</h3>
+    <p>Both are retrieval-augmented assistants. Both score 5 on Feasibility and 5 on Team Strength <em>because they are easy for you</em>, and 2 on Differentiation because a source-cited RAG chatbot is the most-attempted shape in Indian hackathons this year. Averaging five factors lets two convenience scores outvote the one factor that decides who wins.</p>
+    <p>So Differentiation of 2 is a veto, not a score. A statement you can build comfortably and three hundred other teams can also build comfortably is not an opportunity &mdash; it is a queue.</p>
+    <p>Ranks 6 to 10 fail the mirror-image test. Every one of them is a <em>better problem</em> than ranks 4 and 5 &mdash; and every one needs something you do not have in twenty days: a model skill you self-assessed as weak, a dataset that is not obtainable, or an access agreement nobody will sign for you. They are documented in full anyway, because the reason each one is out is the reason you should be able to give a judge who asks why you did not take it.</p>
+  </div>
+
+  <div class="note" style="margin-top:16px">
+    <h3><svg viewBox="0 0 16 16" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.6 11.4L6.4 5.6l3 3 4-6.2"/><path d="M2.6 13.8h11"/></svg>The same ten, ranked on the problem alone</h3>
+    <p>Ranking the statements on their own merits &mdash; impact, relevance, innovation, feasibility, scalability, technology fit, data availability, prototype feasibility &mdash; produces a different order, and the difference is the most useful thing on this page. <strong style="color:var(--ink)">SIH26168 is second on problem quality at 8.00 and sixth here.</strong> <strong style="color:var(--ink)">SIH26104 is fifth there at 7.50 and twelfth here.</strong> Nothing about those problems changed; two factors that describe <em>you</em> were added, and they moved.</p>
+    <p>Both rankings are correct for their own question. &ldquo;Which is the best problem?&rdquo; and &ldquo;which is the best bet for this team, in this state, with these twenty days?&rdquo; are different questions, and a single blended number would hide the reason for every position on the list. Only one of them survives at rank&nbsp;1 either way &mdash; and that is the actual argument for SIH26229.</p>
+  </div>
+
+  <div class="note" style="margin-top:16px">
+    <h3><svg viewBox="0 0 16 16" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="7" r="4.6"/><path d="M10.4 10.4L14 14"/></svg>The finding worth acting on tonight</h3>
+    <p>The widely-circulated "All 226 Problem Statements" PDF contains 226 codes. The live portal carries 229. The three missing are SIH26227, SIH26228 and <strong style="color:var(--ink)">SIH26229</strong> &mdash; the top pick. The popular sih2026.vuce.in mirror, snapshotted 21 August, returns "Problem statement not found" for it.</p>
+    <p>Every team working from either reference cannot see this statement at all. Verify it yourself at sih.gov.in before committing; if it is live there, it is submittable whatever the PDF says.</p>
+  </div>
+</section>
+
+<!-- ============ RANK 1 ============ -->
+<article class="dos" id="r1">
+  <div class="dos-head">
+    <div class="dos-rank">1</div>
+    <div>
+      <div class="dos-id">
+        <h2>Kabadiwala Connect</h2>
+        <span class="mono" style="color:var(--muted);font-size:.85rem">SIH26229</span>
+      </div>
+      <p style="color:var(--ink-2);max-width:64ch">Bringing the informal collector into the formal recycling chain.</p>
+      <div class="dos-meta">
+        <div><span class="lab">Sponsor</span><span>JNARDDC, Nagpur</span></div>
+        <div><span class="lab">Ministry</span><span>Mines</span></div>
+        <div><span class="lab">Languages required</span><span>Marathi + Hindi</span></div>
+        <div><span class="lab">Problem-quality score</span><span class="mono">8.30 / 10</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dos-body">
+    <div class="blk">
+      <h3>The problem</h3>
+      <ul class="pts">
+        <li><strong>Who has it:</strong> the individual informal e-waste collector &mdash; waste-picker, itinerant buyer, small kabadiwala &mdash; working in cash, on foot or by cart, often with limited literacy and an entry-level Android phone.</li>
+        <li><strong>What hurts:</strong> they cannot see what their material is worth, cannot tell which nearby recycler is CPCB-authorised, and get no document for a handover. The formal route costs them time and certainty while paying no better than the informal one.</li>
+        <li><strong>Who buys versus who uses:</strong> these differ, and that is the crux. The user is the collector; the buyer is the recycler or producer who needs audit-grade tonnage. Serve only the buyer and you have built another compliance portal; serve only the user and there is no revenue. The statement forces you to reconcile the two by demanding a unit-economics assessment.</li>
+        <li><strong>What success changes:</strong> the formal channel becomes the collector's preferred option on price and convenience, not their obligation.</li>
+      </ul>
+    </div>
+
+    <div class="blk">
+      <h3>Root cause</h3>
+      <dl class="rca">
+        <dt>Symptom</dt><dd>Roughly 95% of India's e-waste is handled informally, and material still reaches open-air cable burning and acid leaching of circuit boards.</dd>
+        <dt>Cause</dt><dd>Not ignorance, and not weak enforcement. The E-Waste Rules 2022 built Extended Producer Responsibility as a transaction between producers and <em>authorised recyclers</em>. The person who physically performs the collection is not a party to it, so none of the EPR value reaches the first mile &mdash; and informality keeps its structural advantage of cash, speed and no paperwork.</dd>
+        <dt>Impact</dt><dd>India generated about 1.39 million tonnes of e-waste in FY 2024-25. Workers absorb the health cost, critical minerals are destroyed, and the certificate market has detached from physical recycling.</dd>
+        <dt>Evidence</dt><dd><span class="tag t-fact">Fact</span> CPCB's informal-share figure; collection targets rising from 60% in FY 2023-24 to 80% by FY 2027-28; CSE found roughly 700,000 fake plastic EPR certificates, 38&times; the issuing recyclers' capacity; e-waste credits trade at &#8377;6&ndash;8/kg against a genuine recycling cost of at least &#8377;22/kg. <span class="tag t-inf">Inference</span> that closing the price-and-proof gap redirects material &mdash; plausible, consistent with the evidence, and <strong>not yet validated</strong>. That is what the mandated field research exists to test.</dd>
+      </dl>
+      <ol class="whys">
+        <li>Why does e-waste reach backyard processing? Because informal collectors sell to informal aggregators.</li>
+        <li>Why do they sell there? Because that buyer pays cash on the spot, at a price the collector cannot benchmark.</li>
+        <li>Why can't they benchmark it? Because no price reference exists for scrap categories at their location, and no way to find which nearby recycler is authorised.</li>
+        <li>Why is there no reference? Because no digital system was built for a low-literacy, offline, cash-based user at the bottom of the chain &mdash; every platform targets the aggregator above them.</li>
+        <li>Because EPR was designed around certificates issued to recyclers, the collector doing the physical work sits outside the regulation's incentive structure entirely. That exclusion is the root cause.</li>
+      </ol>
+    </div>
+
+    <div class="blk">
+      <h3>What already exists</h3>
+      <ul class="pts">
+        <li><strong>Recykal / Recykal.Market</strong> &mdash; the sharpest competitor. A B2B marketplace explicitly for waste aggregators and scrap dealers, plus EPR Loop for producer compliance; over a million tonnes channelled, 675 recyclers. It serves a business with a smartphone, a ledger and a GST number.</li>
+        <li><strong>Kabadiwalla Connect (Chennai, since 2014)</strong> &mdash; a real social enterprise backed by the World Economic Forum and Shell, which mapped around 2,000 kabadiwallas and runs an app connecting households to scrap dealers. It digitises discovery, not the collector's onward sale. <strong>The Kabadiwala (Bhopal)</strong> is a second name collision.</li>
+        <li><strong>Karo Sambhav</strong> &mdash; a Producer Responsibility Organisation, producer-side compliance. <strong>ScrapUncle</strong> &mdash; doorstep household pickup in Delhi NCR.</li>
+        <li><strong>Nirmal Vasundhara Waste Tracker</strong> &mdash; connects Swachhta Grahis, rag-pickers, kabadiwalas and recyclers for EPR reporting. Closest in intent; plastic-focused and reporting-oriented rather than earnings-oriented.</li>
+        <li><strong>CPCB EPR portal</strong> &mdash; the statutory registry, regulator-facing, and the source of the certificate market that CSE found compromised.</li>
+      </ul>
+    </div>
+
+    <div class="blk">
+      <h3>The gap</h3>
+      <div class="chain">
+        <div><span class="lab">Exists</span>Recykal, Karo Sambhav, CPCB EPR portal, Waste Tracker</div>
+        <div><span class="lab">Limitation</span>All built for a literate, connected, transacting business. The collector appears in them as a data point, never as a customer.</div>
+        <div><span class="lab">Unmet need</span>A price reference and a proof-of-handover that work in the collector's real conditions &mdash; vernacular, spoken, offline, cash-compatible, on a low-end phone.</div>
+        <div><span class="lab">Who is affected</span>The individual informal collector, the population handling the ~95% share.</div>
+        <div><span class="lab">Why it matters</span>EPR targets reach 80% by FY 2027-28, and the certificate market is currently meeting them with fraud rather than tonnage.</div>
+      </div>
+      <p style="font-size:.94rem;color:var(--ink-2)">Stated honestly: the statement implies emptier ground than exists. Recykal.Market overlaps substantially. The gap survives because none of these reach <em>below</em> the aggregator, and because CSE and NITI Aayog commentary independently confirm informal collectors remain structurally unrepresented in the EPR framework.</p>
+    </div>
+
+    <div class="blk">
+      <h3>Why Maharashtra changes this</h3>
+      <ul class="pts">
+        <li><strong>The sponsor is in your state.</strong> JNARDDC is in Nagpur. "We interviewed collectors twelve kilometres from your office" is a different pitch from a national claim.</li>
+        <li><strong>The field site is documented.</strong> A published Nagpur case study found around 59% of surveyed scrap dealers dismantling electronics to extract metals, households stockpiling e-waste, and no proper collection mechanism.</li>
+        <li><strong>The economics are published too.</strong> Kabadiwalas travel 20&ndash;30 km a day; e-waste is roughly 10% of what they collect; about 45% of households prefer to give e-waste to them. That is a unit-economics baseline you can cite rather than assume.</li>
+        <li><strong>Marathi is free for you.</strong> The statement's minimum-language bar is a genuine obstacle for a team in Chennai or Kolkata. You can run the interview, write the interface strings and record the demo voice-over without translating anything.</li>
+        <li><strong>Policy tailwind.</strong> Maharashtra is planning four circular-economy parks, one of them in Nagpur.</li>
+      </ul>
+    </div>
+
+    <div class="blk">
+      <h3>Technology that actually fits</h3>
+      <p style="color:var(--ink-2)">Nothing here needs a trained model, which is exactly why it suits you. Offline-first local storage with deferred sync is the hard engineering, and your backend engineer owns it. The low-literacy, icon-driven interface is your designer's, and it is what judges will actually see. Scrap-category classification can be an off-the-shelf image model behind an API for the demo, with a fine-tune promised for the finale &mdash; say that honestly rather than overclaiming. Price estimation is a lookup over the price data you collect, and should stay one until the data justifies more.</p>
+      <p style="color:var(--ink-2)"><strong>Where LangGraph earns its place:</strong> the spoken safety-guidance and price-query assistant in Marathi, as a bounded conversational flow over your own price and recycler data. That is orchestration, not model training, and it is a legitimate use of the one AI skill you have.</p>
+    </div>
+
+    <div class="blk">
+      <h3>The unique claim</h3>
+      <p class="claim">The only system where going formal pays a Nagpur collector more today &mdash; because the verifiable handover record it produces is worth money to the recycler, and that value is shared back at the point of sale.</p>
+      <ul class="pts">
+        <li><strong>It serves the bottom of the chain.</strong> Every researched competitor onboards a business. This onboards a person with a &#8377;6,000 phone and no ledger.</li>
+        <li><strong>The handover record is the product, not a feature.</strong> Photo, weight, timestamp, GPS and counter-signature is exactly the artefact a compromised certificate market lacks &mdash; simultaneously the collector's receipt and the recycler's audit evidence.</li>
+        <li><strong>Offline-first is a design constraint, not a nice-to-have.</strong> Competitors assume connectivity; full offline capability with deferred sync is hard and decisive for this user.</li>
+        <li><strong>Price transparency inverts the negotiation</strong> before any transaction occurs.</li>
+        <li><strong>Cash-compatible.</strong> Refusing to make digital payment a precondition is the difference between an adoptable product and a demo.</li>
+      </ul>
+      <p style="font-size:.9rem;color:var(--muted)">Defensibility: not the code. The collector relationships and the price dataset, both of which compound. Strength <span class="mono" style="color:var(--ink-2)">8/10</span>.</p>
+    </div>
+
+    <div class="blk">
+      <h3>Scoring</h3>
+      <div class="scores">
+        <div class="srow"><span class="cn">Impact</span><span class="cv">5</span><span class="meter go" style="--w:100%"><span class="track"><i></i></span></span><span class="rs">1.39 Mt a year, ~95% informal, worker health, critical-mineral recovery, and a certificate market with fraud already documented at scale.</span></div>
+        <div class="srow"><span class="cn">Feasibility</span><span class="cv">5</span><span class="meter go" style="--w:100%"><span class="track"><i></i></span></span><span class="rs">Offline-first Android, recycler console, image classifier, matching. Every component is well-trodden; the difficulty is judgement, not engineering.</span></div>
+        <div class="srow"><span class="cn">Differentiation</span><span class="cv">5</span><span class="meter go" style="--w:100%"><span class="track"><i></i></span></span><span class="rs">Native Marathi, local collectors, a sponsor in your city, and a statement most teams cannot see. Execution differentiation, not concept differentiation &mdash; but real.</span></div>
+        <div class="srow"><span class="cn">Ministry fit</span><span class="cv">5</span><span class="meter go" style="--w:100%"><span class="track"><i></i></span></span><span class="rs">SIH's deployment guidelines ask the ministry to name a technical agency under its aegis. Here that agency already exists and wrote the statement.</span></div>
+        <div class="srow"><span class="cn">Team strength</span><span class="cv">4</span><span class="meter" style="--w:80%"><span class="track"><i></i></span></span><span class="rs">Your stack almost exactly &mdash; minus the domain and field-research role, which is the one that wins this statement.</span></div>
+      </div>
+      <div class="calcbox">Impact         5
+Feasibility    5
+Differentiation 5
+Ministry fit   5
+Team strength  4
+               &#9472;&#9472;
+average       4.8</div>
+      <div class="total"><span class="tv" style="color:var(--go)">4.8</span><span class="lab">of 5 &middot; rank 1</span></div>
+    </div>
+
+    <div class="blk">
+      <h3>What still breaks it</h3>
+      <ul class="pts">
+        <li><strong>The credit hypothesis.</strong> If collectors sell informally because their aggregator advances them credit, no interface touches that. Test it in one question on the field visit: <em>if someone paid you ten rupees more per kilo but you had to travel four kilometres further, would you go?</em></li>
+        <li><strong>Recykal extending downward</strong> is the dangerous scenario, and April 2026 trade coverage describing a "Zepto-like makeover" of India's scrap trade suggests the sector is accelerating.</li>
+        <li><strong>Two-sided cold start.</strong> No collector joins without a recycler paying better; no recycler pays better without volume.</li>
+        <li><strong>The name is taken twice over.</strong> Rename the product on day one; keep the statement title in the submission.</li>
+        <li><strong>You are one role short</strong>, and it is the differentiating role. Without the field visit in the next 48 hours, this pick loses most of its advantage.</li>
+      </ul>
+    </div>
+  </div>
+</article>
+
+<!-- ============ RANK 2 ============ -->
+<article class="dos" id="r2">
+  <div class="dos-head">
+    <div class="dos-rank">2</div>
+    <div>
+      <div class="dos-id">
+        <h2>Patient Case-Taking Software</h2>
+        <span class="mono" style="color:var(--muted);font-size:.85rem">SIH26047</span>
+      </div>
+      <p style="color:var(--ink-2);max-width:64ch">Structured clinical history captured before the consultation begins.</p>
+      <div class="dos-meta">
+        <div><span class="lab">Sponsor</span><span>All India Institute of Ayurveda</span></div>
+        <div><span class="lab">Ministry</span><span>Ayush</span></div>
+        <div><span class="lab">Your fit</span><span>Best LangGraph match in the catalogue</span></div>
+        <div><span class="lab">Problem-quality score</span><span class="mono">7.90 / 10</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dos-body">
+    <div class="blk">
+      <h3>The problem</h3>
+      <ul class="pts">
+        <li><strong>Who has it:</strong> both sides of a government OPD consultation &mdash; the physician with two to five minutes per patient, and the patient who cannot convey a history in that window.</li>
+        <li><strong>What hurts:</strong> history-taking is the highest-yield diagnostic act, classically credited with reaching the right diagnosis in 70&ndash;80% of cases before any test, and it is systematically compressed out of the encounter. Patients arrive holding disordered paper from prior providers that the doctor must scan during the same minutes.</li>
+        <li><strong>Why it exists:</strong> arithmetic. Tertiary institutions register 4,000&ndash;10,000 OPD patients a day; consultation time is what gives way.</li>
+        <li><strong>What success changes:</strong> the physician opens the consultation already holding a structured history, so the scarce minutes go to examination, reasoning and counselling.</li>
+      </ul>
+    </div>
+
+    <div class="blk">
+      <h3>Root cause</h3>
+      <dl class="rca">
+        <dt>Symptom</dt><dd>Consultations of two to five minutes, under-elicited histories, repeated questioning across visits, missed comorbidities.</dd>
+        <dt>Cause</dt><dd>Not physician indifference, and not missing digital infrastructure &mdash; ABDM already exists and works. The only channel for collecting a history is the physician's own scarce time. History-taking was never unbundled from the consultation, so every minute of it competes with examination and reasoning.</dd>
+        <dt>Impact</dt><dd>Diagnostic quality across the highest-volume tier of Indian public healthcare, plus the cumulative cost of re-asking the same questions every visit.</dd>
+        <dt>Evidence</dt><dd><span class="tag t-fact">Fact</span> a BMJ Open study across 67 countries placed India's average primary-care consultation at just over two minutes; AIIMS reports around 10,000 OPD patients daily against 363 of 1,207 sanctioned faculty posts vacant; ABHA Scan &amp; Share has generated over 3 crore OPD tokens across 5,435 facilities <em>for registration only</em>. <span class="tag t-inf">Inference</span> that pre-consultation structured intake improves diagnostic quality in this setting &mdash; clinically plausible, not validated for Indian government OPDs.</dd>
+      </dl>
+      <ol class="whys">
+        <li>Why are histories incomplete? The physician has two to five minutes.</li>
+        <li>Why so short? OPD volume vastly exceeds physician supply.</li>
+        <li>Why doesn't someone else take the history? Nurse-led triage is itself staff-limited and does not scale to thousands a day.</li>
+        <li>Why hasn't software absorbed it? Registration systems capture demographics only; health apps presuppose a smartphone, connectivity and prior enrolment, excluding the elderly, rural and first-visit majority.</li>
+        <li>Because nothing was built for the patient who is already physically present and waiting &mdash; the one moment when their time is free and abundant. The waiting room is an unused resource.</li>
+      </ol>
+    </div>
+
+    <div class="blk">
+      <h3>What already exists</h3>
+      <ul class="pts">
+        <li><strong>ABHA Scan &amp; Share</strong> &mdash; the government's own system at real scale, stopping deliberately at demographics. The strongest single piece of evidence that the first mile is empty.</li>
+        <li><strong>EkaScribe, Augnito, Nabla, Abridge, DAX</strong> &mdash; ambient scribes, physician-side. EkaScribe is purpose-built for noisy multilingual Indian OPDs. This is the most serious competitive threat and the question you will be asked.</li>
+        <li><strong>Phreesia</strong> &mdash; the mature version of this category abroad, around 170 million visits a year, on an insurance-and-payments model that does not transfer to an Indian government OPD.</li>
+        <li><strong>eSanjeevani CDSS</strong> &mdash; a validated symptom repository in 12 Indian languages, bound to teleconsultation rather than physical OPD flow.</li>
+        <li><strong>Parayu + Koode</strong> &mdash; an open hobbyist Malayalam kiosk on a Raspberry Pi under &#8377;30,000. Evidence that hardware cost is not the barrier, and that others are circling.</li>
+      </ul>
+    </div>
+
+    <div class="blk">
+      <h3>The gap</h3>
+      <div class="chain">
+        <div><span class="lab">Exists</span>ABHA Scan &amp; Share, ambient scribes, mobile health apps, Phreesia abroad</div>
+        <div><span class="lab">Limitation</span>ABDM digitises identity, not clinical narrative. Scribes capture only what is said in a consultation already too short to say it in.</div>
+        <div><span class="lab">Unmet need</span>Structured history and prior-document digitisation captured before the encounter, from a patient with no smartphone, no literacy assumption and no prior enrolment.</div>
+        <div><span class="lab">Who is affected</span>Physicians and OPD patients at India's highest-volume public institutions.</div>
+        <div><span class="lab">Why it matters</span>ABDM's rails exist and are unused for this. The first mile is genuinely unoccupied.</div>
+      </div>
+      <p style="font-size:.94rem;color:var(--ink-2)">The sharpest counter-argument, to answer head-on: an ambient scribe solves much of the same problem for a fraction of the effort. The rebuttal is that a scribe records only what was said, and the entire problem is that too little gets said. Whether that survives a real deployment is <span class="tag t-inf">unvalidated</span>.</p>
+    </div>
+
+    <div class="blk">
+      <h3>Why it suits your stack better than it looks</h3>
+      <ul class="pts">
+        <li><strong>An adaptive clinical history interview is a state graph.</strong> A patient says "chest pain"; the system branches through onset, character, radiation, aggravating and relieving factors. That is what LangGraph is for &mdash; a bounded, auditable traversal of a clinical ontology, not free-form generation.</li>
+        <li><strong>Every model you need already exists as an API.</strong> Speech recognition through Bhashini and AI4Bharat, OCR through a document-AI service. Consuming rather than training is the correct architecture here, not a limitation.</li>
+        <li><strong>Your designer matters unusually much.</strong> The premise is a first-time, elderly, low-literacy patient using it unaided, so the icon-driven, audio-guided interface <em>is</em> the innovation.</li>
+      </ul>
+    </div>
+
+    <div class="blk">
+      <h3>The unique claim</h3>
+      <p class="claim">It turns OPD waiting time &mdash; the one resource Indian public hospitals have in surplus &mdash; into structured clinical history, for a patient who cannot read, has no smartphone, and has never enrolled in anything.</p>
+      <ul class="pts">
+        <li><strong>Unbundling, not acceleration.</strong> Every competitor makes the consultation faster; this moves work out of it entirely.</li>
+        <li><strong>Zero preconditions</strong> &mdash; no install, no enrolment, no literacy, no connectivity assumption.</li>
+        <li><strong>Fills ABDM's first mile</strong>, where the rails are built and carry only demographics.</li>
+        <li><strong>Dashavidha Pariksha is a genuine moat.</strong> No commercial intake product models Ayurvedic assessment, and it is the sponsor's own reason for asking.</li>
+      </ul>
+      <p style="font-size:.9rem;color:var(--muted)">Strength <span class="mono" style="color:var(--ink-2)">7/10</span>.</p>
+    </div>
+
+    <div class="blk">
+      <h3>Scoring</h3>
+      <div class="scores">
+        <div class="srow"><span class="cn">Impact</span><span class="cv">5</span><span class="meter go" style="--w:100%"><span class="track"><i></i></span></span><span class="rs">Diagnostic quality at the highest-volume tier of Indian public healthcare. On ceiling, the largest human impact of the five.</span></div>
+        <div class="srow"><span class="cn">Feasibility</span><span class="cv">3</span><span class="meter" style="--w:60%"><span class="track"><i></i></span></span><span class="rs">Five substantial subsystems against rank 1's one. Deliverable only if aggressively narrowed, and the full build stays heavy to the finale.</span></div>
+        <div class="srow"><span class="cn">Differentiation</span><span class="cv">4</span><span class="meter" style="--w:80%"><span class="track"><i></i></span></span><span class="rs">Patient-side intake is unoccupied in India, but Phreesia proves the category abroad and scribes converge from the other direction.</span></div>
+        <div class="srow"><span class="cn">Ministry fit</span><span class="cv">4</span><span class="meter" style="--w:80%"><span class="track"><i></i></span></span><span class="rs">AIIA is an autonomous institute under Ayush with a real ABDM integration path. Health deployment is slower and governance-heavy.</span></div>
+        <div class="srow"><span class="cn">Team strength</span><span class="cv">4</span><span class="meter" style="--w:80%"><span class="track"><i></i></span></span><span class="rs">LangGraph is the right tool and Bhashini removes the speech burden. Handwritten OCR is the weak spot &mdash; cut it from v1.</span></div>
+      </div>
+      <div class="calcbox">Impact         5
+Feasibility    3
+Differentiation 4
+Ministry fit   4
+Team strength  4
+               &#9472;&#9472;
+average       4.0</div>
+      <div class="total"><span class="tv">4.0</span><span class="lab">of 5 &middot; rank 2</span></div>
+    </div>
+
+    <div class="blk">
+      <h3>What still breaks it</h3>
+      <ul class="pts">
+        <li><strong>Ambient scribes may simply be the better answer.</strong> EkaScribe needs no patient interaction, no kiosk and no behaviour change.</li>
+        <li><strong>The patient may not use it.</strong> The design assumes an elderly, anxious, low-literacy, first-time patient will talk to a machine about their symptoms while queuing. That is a large behavioural assumption.</li>
+        <li><strong>Red-flag detection is a safety liability.</strong> A missed acute presentation is a clinical incident, not a bug. Scope it as advisory and say so first.</li>
+        <li><strong>No data, therefore no validation.</strong> Patient records are unobtainable, so nothing can be clinically validated inside the window.</li>
+        <li><strong>Healthcare plus AI is a magnet theme.</strong> Expect a crowded field of polished, shallow entries.</li>
+      </ul>
+    </div>
+  </div>
+</article>
+
+<!-- ============ RANK 3 ============ -->
+<article class="dos" id="r3">
+  <div class="dos-head">
+    <div class="dos-rank">3</div>
+    <div>
+      <div class="dos-id">
+        <h2>Legal Metrology compliance</h2>
+        <span class="mono" style="color:var(--muted);font-size:.85rem">SIH26034</span>
+      </div>
+      <p style="color:var(--ink-2);max-width:64ch">Checking packaged-commodity labels against the Rules, from a photograph.</p>
+      <div class="dos-meta">
+        <div><span class="lab">Sponsor</span><span>Department of Consumer Affairs</span></div>
+        <div><span class="lab">Field site</span><span>Any supermarket</span></div>
+        <div><span class="lab">Enforcement in 2024</span><span class="mono">~1.2 lakh prosecutions</span></div>
+        <div><span class="lab">Problem-quality score</span><span class="mono">7.80 / 10</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dos-body">
+    <div class="blk">
+      <h3>The problem</h3>
+      <ul class="pts">
+        <li><strong>Who has it:</strong> Legal Metrology Officers doing shop-floor inspection, the state Controllers above them, and the Department of Consumer Affairs. Indirectly, every consumer buying a packaged good.</li>
+        <li><strong>What hurts:</strong> mandatory declarations &mdash; packer name and address, net quantity, MRP, month and year of packing, consumer-care details &mdash; must appear in a prescribed form, size and position. Verifying that is done by hand, one package at a time, and must now somehow also cover e-commerce listings.</li>
+        <li><strong>Why it exists:</strong> the ratio of inspectors to products. India recorded roughly 3.5 lakh verifications and 1.2 lakh prosecutions in 2024 &mdash; substantial effort, still a rounding error against products multiplied by outlets multiplied by listings.</li>
+        <li><strong>What success changes:</strong> inspection shifts from random sampling to sampling with priors.</li>
+      </ul>
+    </div>
+
+    <div class="blk">
+      <h3>Root cause</h3>
+      <dl class="rca">
+        <dt>Symptom</dt><dd>Missing declarations, incorrect font sizes and improper MRP declarations are, in the statement's own words, "frequently observed."</dd>
+        <dt>Cause</dt><dd>Compliance is defined by a quantitative, machine-checkable rule set &mdash; declarations enumerated by rule, minimum numeral heights specified as a function of the area of the principal display panel &mdash; and verified by human eyeball. This is unusual: most enforcement problems are hard because the rule is vague. Here the rule is precise and nobody measures it.</dd>
+        <dt>Impact</dt><dd>Consumer detriment on price and quantity transparency at national scale, uneven enforcement across states, and a competitive penalty on packers who do comply.</dd>
+        <dt>Evidence</dt><dd><span class="tag t-fact">Fact</span> the Rules mandate the declarations and prescribe their form; penalties run from &#8377;10,000 to &#8377;50,000, rising to &#8377;1 lakh or up to a year's imprisonment for repeat offences. <span class="tag t-inf">Inference</span> that automated screening raises detection per officer-hour &mdash; plausible, untested.</dd>
+      </dl>
+      <ol class="whys">
+        <li>Why are non-compliant packages on shelves? Because very few are ever checked.</li>
+        <li>Why so few? Because an officer inspects manually, one package at a time.</li>
+        <li>Why manually? Because no tool converts a photograph of a label into a compliance verdict.</li>
+        <li>Why is there no such tool? Because the national product-data infrastructure stores what manufacturers <em>declare</em>, not what the physical label <em>shows</em>.</li>
+        <li>Compliance was digitised as a self-declaration registry rather than as verification of the artefact. The digitisation solved the wrong half.</li>
+      </ol>
+    </div>
+
+    <div class="blk">
+      <h3>What already exists</h3>
+      <ul class="pts">
+        <li><strong>Smart Consumer (GS1 India, with DoCA and FSSAI)</strong> &mdash; scans an 890 barcode and returns product name, MRP, net content, packing date and manufacturer details from the DataKart repository. It reads a barcode into a registry; it never examines the label, so it cannot detect a missing declaration, an undersized font or bad placement. Simultaneously your best evidence and your biggest institutional risk.</li>
+        <li><strong>DataKart</strong> &mdash; the national product data repository behind it, manufacturer-populated by design.</li>
+        <li><strong>Artwork pre-press review services</strong> &mdash; brand-side, pre-print, priced per product, irrelevant to an officer standing in a shop.</li>
+        <li><strong>State Legal Metrology portals</strong> &mdash; licensing, scheduling and case records. Workflow systems, not verification engines.</li>
+      </ul>
+    </div>
+
+    <div class="blk">
+      <h3>The gap</h3>
+      <div class="chain">
+        <div><span class="lab">Exists</span>Smart Consumer / DataKart, artwork consultancies, state portals</div>
+        <div><span class="lab">Limitation</span>They surface self-declared data, advise brands before printing, or manage caseload. None verifies a photographed label against the Rules.</div>
+        <div><span class="lab">Unmet need</span>Photograph, extraction, completeness <em>and geometric</em> verification, then an evidence-grade report with a traceable rule justification.</div>
+        <div><span class="lab">Who is affected</span>Legal Metrology Officers, and consumers through them.</div>
+        <div><span class="lab">Why it matters</span>The rule set is public and quantitative. The only missing component is the checker &mdash; an unusually clean gap.</div>
+      </div>
+    </div>
+
+    <div class="blk">
+      <h3>Technology, and the one hard part</h3>
+      <p style="color:var(--ink-2)">Text detection and layout analysis are routine. The genuinely hard part &mdash; the one that decides whether this is a product or a demo &mdash; is <strong>measurement</strong>: checking that numerals meet a minimum height in millimetres requires recovering physical scale from a photograph, which needs a reference object, known package geometry or a depth cue. Nobody solves the font-size rule without solving that first.</p>
+      <p style="color:var(--ink-2)">The rules themselves should be data, not code, so an amendment is configuration rather than a release. AI is right for detection and extraction, and <strong>actively wrong for the verdict</strong>: a compliance decision that can lead to a &#8377;1 lakh penalty must be deterministic and auditable.</p>
+    </div>
+
+    <div class="blk">
+      <h3>The unique claim</h3>
+      <p class="claim">It checks the label, not the database &mdash; a prosecution-grade verdict from a photograph, with a deterministic rule trace behind every finding.</p>
+      <ul class="pts">
+        <li><strong>Verifies the artefact rather than a self-declaration</strong> &mdash; the exact inverse of DataKart's model, and why Smart Consumer cannot be extended into this.</li>
+        <li><strong>Geometric verification is what nobody does.</strong> Font height against display-panel area is a measurable rule that no existing tool measures.</li>
+        <li><strong>Deterministic, with an audit trail</strong>, because the output is potential evidence.</li>
+        <li><strong>Rules-as-data</strong>, and <strong>reach into e-commerce listings</strong> where physical inspection has none.</li>
+      </ul>
+      <p style="font-size:.9rem;color:var(--muted)">Strength <span class="mono" style="color:var(--ink-2)">7.5/10</span>.</p>
+    </div>
+
+    <div class="blk">
+      <h3>Scoring</h3>
+      <div class="scores">
+        <div class="srow"><span class="cn">Impact</span><span class="cv">3</span><span class="meter" style="--w:60%"><span class="track"><i></i></span></span><span class="rs">National reach and real enforcement volume, but it improves a process rather than changing an outcome for a person. This is the ceiling and it cannot be argued up.</span></div>
+        <div class="srow"><span class="cn">Feasibility</span><span class="cv">5</span><span class="meter go" style="--w:100%"><span class="track"><i></i></span></span><span class="rs">Highest of the five. Bounded scope, public rules, obtainable images, no integration dependencies, and a demo that reads in fifteen seconds.</span></div>
+        <div class="srow"><span class="cn">Differentiation</span><span class="cv">4</span><span class="meter" style="--w:80%"><span class="track"><i></i></span></span><span class="rs">Genuinely unoccupied, and the scale-recovery problem gives it real technical content rather than being a wrapper around OCR.</span></div>
+        <div class="srow"><span class="cn">Ministry fit</span><span class="cv">3</span><span class="meter" style="--w:60%"><span class="track"><i></i></span></span><span class="rs">DoCA has the Legal Metrology division, but already routes product-data work through GS1 India &mdash; a risk of being absorbed rather than adopted.</span></div>
+        <div class="srow"><span class="cn">Team strength</span><span class="cv">4</span><span class="meter" style="--w:80%"><span class="track"><i></i></span></span><span class="rs">OCR through an API, a rule engine in your backend, a report view from your designer. Scale recovery is the one stretch.</span></div>
+      </div>
+      <div class="calcbox">Impact         3
+Feasibility    5
+Differentiation 4
+Ministry fit   3
+Team strength  4
+               &#9472;&#9472;
+average       3.8</div>
+      <div class="total"><span class="tv">3.8</span><span class="lab">of 5 &middot; rank 3</span></div>
+    </div>
+
+    <div class="blk">
+      <h3>What still breaks it</h3>
+      <ul class="pts">
+        <li><strong>Scale recovery may not work</strong> from an uncontrolled photo, and it is the whole differentiator. Without it the font-size check becomes a guess.</li>
+        <li><strong>The long tail of exemptions.</strong> The Rules carry many category-specific exclusions; a thirty-product demo cannot represent the tail, and the tail is where disputes live.</li>
+        <li><strong>Admissibility.</strong> An automated finding leading to prosecution will be challenged, so every verdict needs a rule citation and the extracted evidence attached.</li>
+        <li><strong>DoCA could absorb it</strong> by extending Smart Consumer, an institutional path that does not involve you.</li>
+      </ul>
+    </div>
+  </div>
+</article>
+
+<!-- ============ RANK 4 ============ -->
+<article class="dos veto" id="r4">
+  <div class="dos-head">
+    <div class="dos-rank">4</div>
+    <div>
+      <div class="dos-id">
+        <h2>IP-SAKTI Sahayak</h2>
+        <span class="mono" style="color:var(--muted);font-size:.85rem">SIH26045</span>
+        <span class="mark m-stop"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>Vetoed</span>
+      </div>
+      <p style="color:var(--ink-2);max-width:64ch">A multilingual, source-cited assistant for intellectual property and regulatory guidance in Ayurveda.</p>
+      <div class="dos-meta">
+        <div><span class="lab">Sponsor</span><span>All India Institute of Ayurveda</span></div>
+        <div><span class="lab">Why it appears</span><span>Scores 5 on both team-derived factors</span></div>
+        <div><span class="lab">Why it is refused</span><span>Differentiation 2</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dos-body">
+    <div class="blk">
+      <h3>The problem</h3>
+      <ul class="pts">
+        <li><strong>Who has it:</strong> Ayurvedic practitioners, researchers, AYUSH startups and small manufacturers, and cultivators of medicinal plants.</li>
+        <li><strong>What hurts:</strong> protecting or commercialising an Ayurvedic product means navigating patents, geographical indications, trademarks, copyright, designs, trade secrets and plant-variety rights at once &mdash; plus Access-and-Benefit-Sharing duties under the Biological Diversity Act, plus a drug-regulatory framework deciding whether a formulation is a classical medicine, a proprietary medicine, a new drug, a phytopharmaceutical, a food or a cosmetic.</li>
+        <li><strong>Why it exists:</strong> the regimes were written separately, overlap unpredictably, and the people affected are small enterprises without counsel.</li>
+      </ul>
+    </div>
+
+    <div class="blk">
+      <h3>Root cause</h3>
+      <dl class="rca">
+        <dt>Symptom</dt><dd>Ayurvedic innovation is under-protected and under-commercialised while Indian traditional knowledge stays exposed to misappropriation abroad.</dd>
+        <dt>Cause</dt><dd>India built <em>defensive</em> protection thoroughly and <em>affirmative</em> guidance not at all. The Traditional Knowledge Digital Library stops others patenting Indian traditional knowledge; nothing helps an Indian enterprise protect and commercialise its own.</dd>
+        <dt>Impact</dt><dd>Concentrated on a specific commercial constituency rather than the public &mdash; which is precisely why Impact scores 3.</dd>
+        <dt>Evidence</dt><dd><span class="tag t-fact">Fact</span> the TKDL holds 448,764 traditional-medicine formulations including 127,533 in Ayurveda, and on TKDL evidence 283 patent applications have been refused, amended, withdrawn or abandoned. National Biodiversity Authority approval is required before seeking IP rights on Indian biological material; the Biological Diversity (Amendment) Act 2023 with 2024&ndash;25 Rules changed the compliance picture, and the WIPO Treaty on Genetic Resources and Associated Traditional Knowledge was adopted in May 2024. <span class="tag t-inf">Inference</span> that a guidance assistant materially raises protection rates &mdash; plausible, unevidenced.</dd>
+      </dl>
+      <ol class="whys">
+        <li>Why is Ayurvedic innovation under-protected? The route to protection is not understood by the people who need it.</li>
+        <li>Why not understood? Seven IP regimes, an ABS regime and a drug-regulatory regime interact, with different answers in different jurisdictions.</li>
+        <li>Why hasn't guidance been written? It has, in fragments across agencies &mdash; never assembled, never in plain language, never with the jurisdiction made explicit.</li>
+        <li>Why now? The 2024 patent and biodiversity rules and the 2024 WIPO treaty moved the ground under everyone at once.</li>
+        <li>India invested in defensive infrastructure and never in affirmative guidance. The gap is real &mdash; it is just narrow.</li>
+      </ol>
+    </div>
+
+    <div class="blk">
+      <h3>What already exists</h3>
+      <ul class="pts">
+        <li><strong>TKDL (CSIR)</strong> &mdash; the flagship and a global benchmark. Defensive: it feeds prior art to foreign patent examiners and does not advise an applicant.</li>
+        <li><strong>NBA and ABS portals</strong> &mdash; statutory compliance forms, not guidance.</li>
+        <li><strong>Commercial IP research tools and Indian legal-AI products</strong> &mdash; priced for law firms, not for a cultivator or a two-person startup.</li>
+        <li><strong>Ministry of Ayush circulars</strong> &mdash; authoritative, fragmented, written for people who already understand the framework.</li>
+      </ul>
+    </div>
+
+    <div class="blk">
+      <h3>Why the gap does not save it</h3>
+      <div class="chain">
+        <div><span class="lab">Exists</span>TKDL, NBA portals, commercial IP tools, ministry circulars</div>
+        <div><span class="lab">Limitation</span>Defensive, statutory or expensive. None gives plain-language, jurisdiction-aware, source-cited guidance to a small enterprise.</div>
+        <div><span class="lab">Unmet need</span>Affirmative guidance across overlapping regimes, with citations and an explicit national-versus-international switch.</div>
+        <div><span class="lab">Still vetoed because</span>The gap is real but narrow, and the solution shape &mdash; a source-cited retrieval assistant &mdash; is what several hundred teams will build this year across every ministry.</div>
+      </div>
+      <p style="color:var(--ink-2)">If you took it anyway, the differentiator would be <strong>honest abstention</strong>: refusing to answer when the corpus does not cover the question. A legal assistant that guesses is worse than none, and it is exactly where most teams will cut corners.</p>
+    </div>
+
+    <div class="blk">
+      <h3>Scoring</h3>
+      <div class="scores">
+        <div class="srow"><span class="cn">Impact</span><span class="cv">3</span><span class="meter" style="--w:60%"><span class="track"><i></i></span></span><span class="rs">A specific commercial constituency rather than the public.</span></div>
+        <div class="srow"><span class="cn">Feasibility</span><span class="cv">5</span><span class="meter go" style="--w:100%"><span class="track"><i></i></span></span><span class="rs">Retrieval over a public corpus. Comfortable for your stack, which is the trap.</span></div>
+        <div class="srow"><span class="cn">Differentiation</span><span class="cv">2</span><span class="meter stop" style="--w:40%"><span class="track"><i></i></span></span><span class="rs">The veto. Commodity technique over public documents; any competent team assembles it in a weekend.</span></div>
+        <div class="srow"><span class="cn">Ministry fit</span><span class="cv">4</span><span class="meter" style="--w:80%"><span class="track"><i></i></span></span><span class="rs">AIIA is an autonomous institute and a genuine adopter.</span></div>
+        <div class="srow"><span class="cn">Team strength</span><span class="cv">5</span><span class="meter go" style="--w:100%"><span class="track"><i></i></span></span><span class="rs">Squarely LangChain territory.</span></div>
+      </div>
+      <div class="calcbox">Impact         3
+Feasibility    5
+Differentiation 2
+Ministry fit   4
+Team strength  5
+               &#9472;&#9472;
+average       3.8</div>
+      <div class="total"><span class="tv" style="color:var(--muted)">3.8</span><span class="lab">of 5 &middot; refused on differentiation</span></div>
+    </div>
+
+    <div class="blk">
+      <h3>Why not to take it</h3>
+      <ul class="pts">
+        <li><strong>You would compete on execution polish alone</strong>, against a large field building the same thing. That is a volume fight.</li>
+        <li><strong>Legal correctness is unverifiable in a demo</strong>, and confidently wrong legal guidance is a genuine harm rather than a bug.</li>
+        <li><strong>Impact 3 with Differentiation 2</strong> means the two factors that decide hackathons are both weak, and only the two measuring your convenience are strong.</li>
+        <li><strong>It scores 3.8 for the wrong reasons.</strong> Read that number as a warning about the framework, not an endorsement of the statement.</li>
+      </ul>
+    </div>
+  </div>
+</article>
+
+<!-- ============ RANK 5 ============ -->
+<article class="dos veto" id="r5">
+  <div class="dos-head">
+    <div class="dos-rank">5</div>
+    <div>
+      <div class="dos-id">
+        <h2>BIS Intelligent Assistant</h2>
+        <span class="mono" style="color:var(--muted);font-size:.85rem">SIH26107</span>
+        <span class="mark m-stop"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>Vetoed</span>
+      </div>
+      <p style="color:var(--ink-2);max-width:64ch">Finding the applicable Indian Standard from a plain-language product description.</p>
+      <div class="dos-meta">
+        <div><span class="lab">Sponsor</span><span>Department of Consumer Affairs</span></div>
+        <div><span class="lab">Brief length</span><span class="mono">1,537 characters</span></div>
+        <div><span class="lab">Why it is refused</span><span>Differentiation 2</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dos-body">
+    <div class="blk">
+      <h3>The problem</h3>
+      <ul class="pts">
+        <li><strong>Who has it:</strong> small manufacturers, startups, students and consumers trying to work out which Indian Standard applies to their product, what certification follows, and how to obtain it.</li>
+        <li><strong>What hurts:</strong> the answer is spread across thousands of standards, several schemes, multiple portals and a great many PDFs &mdash; hours a small manufacturer does not have.</li>
+        <li><strong>Why it exists:</strong> BIS publishes standards as documents for people who already know which document they need.</li>
+      </ul>
+    </div>
+
+    <div class="blk">
+      <h3>Root cause</h3>
+      <dl class="rca">
+        <dt>Symptom</dt><dd>Users cannot identify applicable standards, certification requirements, schemes or testing requirements without extended searching.</dd>
+        <dt>Cause</dt><dd>Standards are indexed by <em>standard</em>, not by <em>product description</em>. Someone who knows the IS number finds everything; someone holding a product and a question has no entry point. It is a retrieval-index mismatch.</dd>
+        <dt>Impact</dt><dd>Friction on small-manufacturer compliance and on procurement specification. Real, diffuse and modest.</dd>
+        <dt>Evidence</dt><dd><span class="tag t-fact">Fact</span> BIS publishes thousands of standards across certification, hallmarking, laboratory recognition and conformity assessment. <span class="tag t-inf">Inference</span> that search friction is the binding constraint on compliance rather than cost or awareness &mdash; asserted by the statement, unevidenced, and the weakest premise of the five.</dd>
+      </dl>
+      <ol class="whys">
+        <li>Why can't users find the right standard? They search by product; the corpus is indexed by standard number.</li>
+        <li>Why is it indexed that way? Standards are legal documents organised for issuers and examiners.</li>
+        <li>Why has no product-to-standard mapping been built? It requires semantic mapping across thousands of documents nobody has been funded to do.</li>
+        <li>Why does it matter? The worst-served are the smallest manufacturers, who have no compliance staff.</li>
+        <li>The corpus was organised for its publishers rather than its users &mdash; true, and true of almost every government document corpus, which is exactly why this solution shape is so heavily attempted.</li>
+      </ol>
+    </div>
+
+    <div class="blk">
+      <h3>What already exists</h3>
+      <ul class="pts">
+        <li><strong>BIS's own portals and standards catalogue</strong> &mdash; searchable by number and title. The incumbent, and improving.</li>
+        <li><strong>Smart Consumer and DataKart</strong> &mdash; adjacent DoCA-backed infrastructure, showing the department already routes this kind of work through GS1 India.</li>
+        <li><strong>Commercial standards subscriptions</strong> &mdash; access and alerting for enterprises, not guidance for small manufacturers.</li>
+        <li><strong>General-purpose assistants</strong> &mdash; the uncomfortable competitor. A user can already paste a product description into one and get a plausible answer, so your differentiation must be that yours is correct and cited, which is hard to demonstrate in five minutes.</li>
+      </ul>
+    </div>
+
+    <div class="blk">
+      <h3>Why it is refused</h3>
+      <div class="chain">
+        <div><span class="lab">Exists</span>BIS catalogue, commercial subscriptions, general assistants</div>
+        <div><span class="lab">Limitation</span>Indexed by standard, enterprise-priced, or plausible but unsourced.</div>
+        <div><span class="lab">Unmet need</span>Product-description-to-standard mapping with clause-level citation, free at the point of use.</div>
+        <div><span class="lab">Still vetoed because</span>The need is real and small, and SIH26108 in the same catalogue asks for essentially the same engine aimed at procurement &mdash; which tells you the sponsor sees it as a utility, not a flagship.</div>
+      </div>
+      <p style="color:var(--ink-2)">The one real idea here is <strong>structured product-attribute extraction before retrieval</strong>, so a free-text description becomes a structured query. Everything else is a well-trodden pipeline, and the hardest thing to prove in a pitch is correctness: without a labelled set of product-to-standard pairs you cannot show you beat a general chatbot &mdash; and building that set is the actual work.</p>
+    </div>
+
+    <div class="blk">
+      <h3>Scoring</h3>
+      <div class="scores">
+        <div class="srow"><span class="cn">Impact</span><span class="cv">3</span><span class="meter" style="--w:60%"><span class="track"><i></i></span></span><span class="rs">Real, diffuse, modest.</span></div>
+        <div class="srow"><span class="cn">Feasibility</span><span class="cv">5</span><span class="meter go" style="--w:100%"><span class="track"><i></i></span></span><span class="rs">The highest possible for your stack, and the reason it appears at all.</span></div>
+        <div class="srow"><span class="cn">Differentiation</span><span class="cv">2</span><span class="meter stop" style="--w:40%"><span class="track"><i></i></span></span><span class="rs">The veto. Thin brief, obvious shape, no barrier to entry &mdash; the definition of the herd.</span></div>
+        <div class="srow"><span class="cn">Ministry fit</span><span class="cv">3</span><span class="meter" style="--w:60%"><span class="track"><i></i></span></span><span class="rs">DoCA could commission it directly from GS1 India instead.</span></div>
+        <div class="srow"><span class="cn">Team strength</span><span class="cv">5</span><span class="meter go" style="--w:100%"><span class="track"><i></i></span></span><span class="rs">Entirely within your comfort zone.</span></div>
+      </div>
+      <div class="calcbox">Impact         3
+Feasibility    5
+Differentiation 2
+Ministry fit   3
+Team strength  5
+               &#9472;&#9472;
+average       3.6</div>
+      <div class="total"><span class="tv" style="color:var(--muted)">3.6</span><span class="lab">of 5 &middot; refused on differentiation</span></div>
+    </div>
+
+    <div class="blk">
+      <h3>Why not to take it</h3>
+      <ul class="pts">
+        <li><strong>It is the definition of the herd</strong> &mdash; thin brief, obvious solution shape, no barrier to entry.</li>
+        <li><strong>The premise is unevidenced</strong>, and a judge may ask for the evidence that search friction is the real constraint.</li>
+        <li><strong>A general assistant is a credible substitute in the room</strong>, and "ours cites sources" is weaker than it sounds without an evaluation set.</li>
+        <li><strong>It reached rank 5 only because it is easy for you.</strong> That is the framework's bias, not a recommendation.</li>
+      </ul>
+    </div>
+  </div>
+</article>
+
+<!-- ============ RANK 6 ============ -->
+<article class="dos veto" id="r6">
+  <div class="dos-head">
+    <div class="dos-rank">6</div>
+    <div>
+      <div class="dos-id">
+        <h2>Intelligent Dead Reckoning</h2>
+        <span class="mono" style="color:var(--muted);font-size:.85rem">SIH26168</span>
+      </div>
+      <p style="color:var(--ink-2);max-width:64ch">Lane-level position through a GNSS blackout, from the phone already on the dashboard.</p>
+      <div class="dos-meta">
+        <div><span class="lab">Sponsor</span><span>ISRO / Dept. of Space</span></div>
+        <div><span class="lab">Dataset</span><span>IO-VNBD, public</span></div>
+        <div><span class="lab">Problem-quality score</span><span class="mono">8.00 / 10</span></div>
+        <div><span class="lab">Team strength</span><span class="mono" style="color:var(--stop)">1 / 5</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dos-body">
+    <div class="blk">
+      <h3>The problem</h3>
+      <ul class="pts">
+        <li><strong>Who has it:</strong> anyone navigating by phone alone &mdash; truck drivers, delivery riders, ride-hailing drivers, emergency responders, and the riders of hundreds of millions of two-wheelers. Factory-fitted inertial navigation exists only in high-end cars.</li>
+        <li><strong>What hurts:</strong> in a tunnel, a basement, an urban canyon or under canopy the map freezes or the icon jumps. Missed exits, late deliveries, and a driver looking down to re-orient.</li>
+        <li><strong>Why it is a good statement:</strong> it hands you the measurable outcome, which almost nothing else in the catalogue does &mdash; under 10% positional drift over the blacked-out distance, 10&nbsp;Hz on-device updates, instant transition in both directions.</li>
+      </ul>
+    </div>
+
+    <div class="blk">
+      <h3>Root cause</h3>
+      <dl class="rca">
+        <dt>Symptom</dt><dd>Navigation freezes or jumps in tunnels, basements and urban canyons.</dd>
+        <dt>Cause</dt><dd>Double integration of biased, noisy MEMS measurements. Accelerometer bias integrates once into velocity error and twice into position error, so drift grows super-linearly. The one signal that would bound it &mdash; wheel speed &mdash; sits behind an OBD-II port the phone cannot reach.</dd>
+        <dt>Evidence</dt><dd><span class="tag t-fact">Fact</span> the error mechanism is textbook and uncontested; IO-VNBD exists publicly with 58 hours and 4,400&nbsp;km of smartphone data at 10&nbsp;Hz; published methods already clear the stated benchmark by a wide margin (TLIO within 3&nbsp;m for 90% of a 3&ndash;7 minute window; a 2025 invariant-EKF result under 0.5% of distance travelled). <span class="tag t-inf">Inference</span> that Indian road surfaces and two-wheeler vibration profiles degrade those results materially &mdash; plausible, untested, and no public dataset covers it.</dd>
+      </dl>
+    </div>
+
+    <div class="blk">
+      <h3>What already exists</h3>
+      <ul class="pts">
+        <li><strong>Google Maps and Apple Maps</strong> &mdash; both dead-reckon through short tunnels and both degrade over distance; neither claims lane-level GNSS-denied positioning, and neither targets two-wheelers.</li>
+        <li><strong>Factory automotive INS</strong> &mdash; solves it properly with wheel speed and a mounted IMU, on exactly the vehicles this statement excludes.</li>
+        <li><strong>OBD-II dongle products</strong> &mdash; work well, need hardware and a port two-wheelers do not have.</li>
+        <li><strong>IONet, RoNIN, TLIO, the 2025 AVNet line</strong> &mdash; open, strong, and the honest threat to any novelty claim: the published results already beat the statement&rsquo;s own benchmark.</li>
+      </ul>
+    </div>
+
+    <div class="blk">
+      <h3>The gap</h3>
+      <div class="chain">
+        <div><span class="lab">Exists</span>Academic inertial odometry, automotive INS, OBD dongles, mainstream map apps</div>
+        <div><span class="lab">Limitation</span>The research runs on Western passenger-car data and stays in papers; the products need vehicle hardware; the map apps degrade quietly.</div>
+        <div><span class="lab">Unmet need</span>An edge-inference engine that holds accuracy on Indian surfaces and on two-wheelers, from a phone in a handlebar mount.</div>
+        <div><span class="lab">Why it matters</span>GNSS denial is also adversarial; interference-resilient positioning is a stated NavIC concern.</div>
+      </div>
+      <p style="font-size:.94rem;color:var(--ink-2)">The gap is deployment and domain, not discovery. That is legitimate &mdash; but it has to be owned honestly, because a literature review demolishes any claim beyond it.</p>
+    </div>
+
+    <div class="blk">
+      <h3>Why it is not your pick</h3>
+      <ul class="pts">
+        <li><strong>It is the wrong problem for this team, not a bad problem.</strong> It fell from rank 2 to rank 6 on one factor. IMU sensor fusion, Kalman filtering and a learned velocity estimator, judged against a hard numeric drift benchmark you either hit or you miss &mdash; against teams whose core skill that is. You self-assessed AI-ML as not strong; this is the statement where that assessment costs the most.</li>
+        <li><strong>You cannot bluff it in the room.</strong> The icon either holds in the basement or it does not. That directness is the statement&rsquo;s greatest virtue and, for you, its greatest danger.</li>
+        <li><strong>Highest herd risk in the catalogue.</strong> ISRO branding is the single biggest prestige magnet in SIH, and the supplied dataset lowers the entry barrier. Expect a crowded field of strong teams.</li>
+        <li><strong>Android sensor fragmentation.</strong> Sampling rates, timestamp jitter and sensor quality vary wildly. A model tuned on your phone can fail on the finale phone, which may not be yours.</li>
+        <li><strong>Map-matching flatters the demo.</strong> Snapping to OSM makes a bad trajectory look good on screen, so the team can deceive itself before the judges do it for them.</li>
+      </ul>
+      <p style="font-size:.94rem;color:var(--ink-2)">Ministry Fit is a 5 here and it does not rescue the pick. That is the whole argument for scoring the bet rather than the problem.</p>
+    </div>
+  </div>
+</article>
+
+<!-- ============ RANK 7 ============ -->
+<article class="dos veto" id="r7">
+  <div class="dos-head">
+    <div class="dos-rank">7</div>
+    <div>
+      <div class="dos-id">
+        <h2>Land record digitization</h2>
+        <span class="mono" style="color:var(--muted);font-size:.85rem">SIH26018</span>
+      </div>
+      <p style="color:var(--ink-2);max-width:64ch">Turning scanned legacy registers into structured, validated, queryable fields.</p>
+      <div class="dos-meta">
+        <div><span class="lab">Sponsor</span><span>DoLR, Ministry of Rural Development</span></div>
+        <div><span class="lab">Theme</span><span>Smart Automation</span></div>
+        <div><span class="lab">Problem-quality score</span><span class="mono">7.00 / 10</span></div>
+        <div><span class="lab">Team strength</span><span class="mono" style="color:var(--stop)">2 / 5</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dos-body">
+    <div class="blk">
+      <h3>The problem</h3>
+      <ul class="pts">
+        <li><strong>Who has it:</strong> state revenue departments and tehsil offices holding legacy registers &mdash; and the citizens whose only proof of ownership lives inside them.</li>
+        <li><strong>What hurts:</strong> records survive as handwritten registers, faded scans, damaged pages and legacy PDFs across several scripts. Manual entry is slow and expensive, and its errors propagate into what becomes the authoritative database.</li>
+        <li><strong>What success changes:</strong> a register page becomes structured fields, each with a confidence score and a defined human-review path. The measurable outcome is the share of records auto-accepted above threshold, and cost per page against manual entry.</li>
+      </ul>
+    </div>
+
+    <div class="blk">
+      <h3>Root cause</h3>
+      <dl class="rca">
+        <dt>Symptom</dt><dd>Land records remain unreliable after two decades of national digitisation.</dd>
+        <dt>Cause</dt><dd>The programme optimised for coverage &mdash; a scan exists &mdash; rather than structure. A scanned image satisfies a coverage metric while delivering none of the utility: you cannot verify ownership, detect a duplicate or cross-reference a JPEG. The metric shaped the gap.</dd>
+        <dt>Evidence</dt><dd><span class="tag t-fact">Fact</span> DILRMP reports roughly 95% computerisation across 6.26 lakh villages; the NAKSHA pilot launched February 2025 covers 157 urban local bodies across 27 states and 3 UTs, 4,484&nbsp;sq&nbsp;km and 1.5 crore-plus citizens, with DoLR itself naming poorly maintained records and missing cadastral maps as core challenges. <span class="tag t-inf">Inference, weakly supported</span> that OCR quality is the binding constraint &mdash; validation authority and mutation workflow plausibly matter more.</dd>
+      </dl>
+    </div>
+
+    <div class="blk">
+      <h3>What already exists</h3>
+      <ul class="pts">
+        <li><strong>DILRMP and Bhu-Naksha</strong> &mdash; computerisation and cadastral map viewing; no structure extracted from legacy handwriting.</li>
+        <li><strong>NAKSHA</strong> &mdash; DoLR&rsquo;s own live, funded programme using drone and field survey. Directly adjacent, and the sponsor&rsquo;s active priority, which cuts both ways for a team proposing something nearby.</li>
+        <li><strong>DocXplor</strong> (Vixplor Analytics, Kolkata) &mdash; a commercial AI tool built explicitly to read old, faded, handwritten land records. The closest direct competitor, and proof the market already found this niche.</li>
+        <li><strong>Bhashini OCR</strong> (roughly 25.5 lakh OCR images across Indic scripts) and <strong>IIIT-Hyderabad&rsquo;s ICDAR 2025 Indic handwriting datasets</strong> &mdash; the open training base for anyone attempting it.</li>
+      </ul>
+    </div>
+
+    <div class="blk">
+      <h3>The gap</h3>
+      <div class="chain">
+        <div><span class="lab">Exists</span>DILRMP, NAKSHA, DocXplor, BharatOCR, Bhashini OCR</div>
+        <div><span class="lab">Limitation</span>The programmes deliver images and maps; the commercial tools do recognition and are proprietary; none couples extraction to rule-based validation and duplicate detection with confidence routing.</div>
+        <div><span class="lab">Unmet need</span>Extraction plus validation plus a human-in-the-loop workflow that escalates only low-confidence fields.</div>
+        <div><span class="lab">Why it matters</span>95% computerisation already exists. Every remaining unit of value is in structure and trustworthiness, not more scanning.</div>
+      </div>
+    </div>
+
+    <div class="blk">
+      <h3>Why it is not your pick</h3>
+      <ul class="pts">
+        <li><strong>The hard half is the half you are weakest at.</strong> Indic handwritten text recognition on degraded historical documents is materially harder than printed OCR, and it is not a fine-tune you complete in three weeks. The validation layer, which <em>is</em> your kind of work, is worthless without the recognition working first.</li>
+        <li><strong>You cannot obtain real registers.</strong> Access to actual revenue records requires state permission. Without them there is nothing to validate against, and a demo on synthetic pages proves nothing about the only thing that matters.</li>
+        <li><strong>The sponsor is already building next door.</strong> NAKSHA is live, funded and running now. Proposing adjacent work invites the question of why DoLR would adopt yours instead.</li>
+        <li><strong>A commercial product already occupies the niche.</strong> DocXplor exists and does exactly this, which caps the differentiation argument before you start.</li>
+      </ul>
+      <p style="font-size:.94rem;color:var(--ink-2)">Take this only if someone on your team can secure access to a real tehsil archive. That access, and nothing else, is what would make it winnable.</p>
+    </div>
+  </div>
+</article>
+
+<!-- ============ RANK 8 ============ -->
+<article class="dos veto" id="r8">
+  <div class="dos-head">
+    <div class="dos-rank">8</div>
+    <div>
+      <div class="dos-id">
+        <h2>MPLADS anomaly detection</h2>
+        <span class="mono" style="color:var(--muted);font-size:.85rem">SIH26102</span>
+      </div>
+      <p style="color:var(--ink-2);max-width:64ch">Turning a reporting portal into an interrogation layer, while the money can still be stopped.</p>
+      <div class="dos-meta">
+        <div><span class="lab">Sponsor</span><span>MoSPI, Data Informatics Division</span></div>
+        <div><span class="lab">Portal</span><span>mplads.mospi.gov.in</span></div>
+        <div><span class="lab">Problem-quality score</span><span class="mono">6.95 / 10</span></div>
+        <div><span class="lab">Team strength</span><span class="mono">3 / 5</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dos-body">
+    <div class="blk">
+      <h3>The problem</h3>
+      <ul class="pts">
+        <li><strong>Who has it:</strong> MoSPI, state nodal authorities, district authorities, and the MPs accountable for works in their constituencies.</li>
+        <li><strong>What hurts:</strong> thousands of works through hundreds of implementing agencies, monitored manually and retrospectively &mdash; so problems surface in a CAG audit years after the money is gone.</li>
+        <li><strong>What success changes:</strong> risk-ranked cases surface while corrective action is still possible. Measured as precision of flagged cases confirmed on inspection, and lead time against the audit cycle.</li>
+      </ul>
+    </div>
+
+    <div class="blk">
+      <h3>Root cause</h3>
+      <dl class="rca">
+        <dt>Symptom</dt><dd>Recurring misuse &mdash; funds released for works never built, works executed without MP recommendation, inflated cost estimates.</dd>
+        <dt>Cause</dt><dd>Oversight is periodic and sampled while execution is continuous and distributed. The portal was built to record transactions and render dashboards, not to interrogate a population. Because the system was designed to record rather than to question, the evidence has been collected for thirty years and never examined.</dd>
+        <dt>Evidence</dt><dd><span class="tag t-fact">Fact</span> CAG performance audits in 1998, 2001 and 2011 record the same systemic weaknesses persisting across seventeen-plus years, including funds disbursed where not a single brick had been laid, and 558 works in a single state executed without any MP recommendation. <span class="tag t-inf">Inference</span> that anomaly detection would catch these prospectively &mdash; plausible, because duplicate works, cost outliers and stalled disbursements are exactly the shape it handles well.</dd>
+      </dl>
+    </div>
+
+    <div class="blk">
+      <h3>What already exists</h3>
+      <ul class="pts">
+        <li><strong>The MPLADS portal</strong> &mdash; the live system of record, with a public pre-login dashboard of Lok Sabha and Rajya Sabha aggregates.</li>
+        <li><strong>CAG performance audits</strong> &mdash; the current detection mechanism. Rigorous, authoritative, retrospective and sampled.</li>
+        <li><strong>Factly and similar civic data journalism</strong> &mdash; proof the analysis is possible, while being manual and episodic.</li>
+        <li><strong>Commercial procurement-fraud analytics</strong> &mdash; a mature methodology (duplicate-vendor detection, cost benchmarking, collusion graphs) that has simply never been pointed at this scheme.</li>
+      </ul>
+    </div>
+
+    <div class="blk">
+      <h3>The gap</h3>
+      <div class="chain">
+        <div><span class="lab">Exists</span>MPLADS dashboards, CAG audits, civic journalism, PFMS</div>
+        <div><span class="lab">Limitation</span>Dashboards aggregate; audits sample retrospectively; journalism is episodic. None scores individual works continuously.</div>
+        <div><span class="lab">Unmet need</span>Population-level, continuous, risk-ranked scoring of individual works, alerting the authority who can still intervene.</div>
+        <div><span class="lab">Why it matters</span>The failure pattern is documented across three decades and three CAG audits, and it has not changed.</div>
+      </div>
+      <p style="font-size:.94rem;color:var(--ink-2)">The strongest idea in the statement is that the detectors need not be invented &mdash; the CAG has already written down the failure patterns, audited them, and published them.</p>
+    </div>
+
+    <div class="blk">
+      <h3>Why it is not your pick</h3>
+      <ul class="pts">
+        <li><strong>The data does not exist publicly. The portal was checked directly.</strong> The MPLADS dashboard is a ZK Java application whose client JavaScript stores endpoint strings character-reversed &mdash; deliberate obfuscation. Export is print and PDF only, with no CSV. The endpoints recoverable from the client return tenure- and house-level aggregates, and REST paths without a session return the app shell.</li>
+        <li><strong>Without per-work rows there is no anomaly detection.</strong> There is only a dashboard rebuild, which is a much weaker submission wearing the same title.</li>
+        <li><strong>Medium herd risk for the wrong reason.</strong> &ldquo;AI fraud detection dashboard&rdquo; reads as approachable, so it will draw teams &mdash; most of whom hit the same wall, and some of whom will hide it behind synthetic data.</li>
+        <li><strong>Everything downstream is easy.</strong> Text similarity, quantile regression, survival analysis, graph analysis &mdash; none of it needs deep learning. That is not the constraint. Data access is the entire game.</li>
+      </ul>
+      <p style="font-size:.94rem;color:var(--ink-2)">This becomes a genuinely strong pick the moment someone gets you work-level records. Nothing else about it needs to change.</p>
+    </div>
+  </div>
+</article>
+
+<!-- ============ RANK 9 ============ -->
+<article class="dos veto" id="r9">
+  <div class="dos-head">
+    <div class="dos-rank">9</div>
+    <div>
+      <div class="dos-id">
+        <h2>Unidirectional traffic detection</h2>
+        <span class="mono" style="color:var(--muted);font-size:.85rem">SIH26145</span>
+      </div>
+      <p style="color:var(--ink-2);max-width:64ch">Detecting six threat classes from passively observed metadata, with no enrichment and no return path.</p>
+      <div class="dos-meta">
+        <div><span class="lab">Sponsor</span><span>NTRO</span></div>
+        <div><span class="lab">Dataset</span><span>Synthetic recipe supplied</span></div>
+        <div><span class="lab">Problem-quality score</span><span class="mono">7.40 / 10</span></div>
+        <div><span class="lab">Team strength</span><span class="mono" style="color:var(--stop)">2 / 5</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dos-body">
+    <div class="blk">
+      <h3>The problem</h3>
+      <ul class="pts">
+        <li><strong>Who has it:</strong> analysts inside a monitoring enclave behind a hardware data diode at a critical-infrastructure operator &mdash; power, oil and gas, transport.</li>
+        <li><strong>What hurts:</strong> they can see everything and touch nothing. No probing, no completing a handshake, no reputation lookup, no inline block.</li>
+        <li><strong>Why the blindness exists:</strong> deliberately. The diode removes an attack class in which a compromised monitoring system becomes a pivot into the production core, and it preserves a clean chain of custody. The blindness is a knowingly paid price.</li>
+      </ul>
+    </div>
+
+    <div class="blk">
+      <h3>Root cause</h3>
+      <dl class="rca">
+        <dt>Symptom</dt><dd>Analytics inside the enclave under-detect relative to a connected SOC with the same visibility.</dd>
+        <dt>Cause</dt><dd>Most detection tooling silently assumes enrichment &mdash; reputation lookups, DNS resolution, threat-intelligence APIs, sandbox detonation, active scanning. Every one is an outbound call. Behind a diode, detection must be reconstructed from flow statistics and TLS/QUIC metadata alone. The constraint is epistemic, not architectural: the enclave does not lack packets, it lacks context.</dd>
+        <dt>Evidence</dt><dd><span class="tag t-fact">Fact</span> data diodes physically prevent return traffic and do not inspect payloads. <span class="tag t-fact">Fact, and this cuts against the statement</span> Zeek and Suricata already deploy passively on SPAN ports and TAPs as their standard architecture &mdash; one-way observation is the norm for intrusion detection, not an exotic constraint.</dd>
+      </dl>
+    </div>
+
+    <div class="blk">
+      <h3>What already exists</h3>
+      <ul class="pts">
+        <li><strong>Zeek and Suricata</strong> &mdash; the incumbents, already passive on a mirror or TAP. Zeek emits exactly the connection, DNS and TLS logs this pipeline needs. Any credible submission is a scoring layer <em>on top of</em> Zeek, and saying so is a strength rather than a concession.</li>
+        <li><strong>Corelight, Darktrace, Vectra, ExtraHop</strong> &mdash; strong behavioural analytics whose value leans on cloud intelligence and enrichment, which is exactly what the enclave forbids.</li>
+        <li><strong>Data-diode vendors</strong> (Waterfall, Owl, Garland, Profitap) &mdash; they sell the transport and explicitly leave the analytics to someone else.</li>
+        <li><strong>JA3/JA4 fingerprinting and encrypted-traffic-analysis research</strong> &mdash; the open foundation for detecting malware inside TLS without decrypting it.</li>
+      </ul>
+    </div>
+
+    <div class="blk">
+      <h3>The gap</h3>
+      <div class="chain">
+        <div><span class="lab">Exists</span>Zeek and Suricata sensors, commercial NDR, ETA research</div>
+        <div><span class="lab">Limitation</span>The open sensors log richly but do not score; the commercial platforms score well but assume connectivity the enclave prohibits.</div>
+        <div><span class="lab">Unmet need</span>A self-contained streaming scorer over passive flow and TLS metadata, with a standard alert schema and an honestly measured throughput.</div>
+        <div><span class="lab">Why it matters</span>Consequence severity is highest exactly where visibility is most constrained.</div>
+      </div>
+      <p style="font-size:.94rem;color:var(--ink-2)">Stated plainly: the gap is narrower than the statement implies. Passive-only monitoring is standard IDS practice, so &ldquo;unidirectional&rdquo; is not the novelty. The enrichment-free requirement is real, and it is the thing worth building for &mdash; reframe around it before a judge does it for you.</p>
+    </div>
+
+    <div class="blk">
+      <h3>Why it is not your pick</h3>
+      <ul class="pts">
+        <li><strong>It needs networking and security fluency you do not have.</strong> Flow records, JA3/JA4, DGA entropy, beacon periodicity and streaming throughput budgets are a specialism. Low herd risk here is a warning, not an opportunity: the field is thin because it self-selects.</li>
+        <li><strong>Nothing in it plays to your stack.</strong> No offline-first mobile, no vernacular interface, no field evidence, no LangGraph. Your strongest assets contribute nothing.</li>
+        <li><strong>AI is optional for four of the six classes</strong> &mdash; an honest team says so, which means the differentiator is streaming architecture and calibrated confidence. That is systems engineering, judged by people who know what good looks like.</li>
+        <li><strong>The number an operator asks for first is throughput,</strong> and measuring it credibly is a project of its own.</li>
+      </ul>
+    </div>
+  </div>
+</article>
+
+<!-- ============ RANK 10 ============ -->
+<article class="dos veto" id="r10">
+  <div class="dos-head">
+    <div class="dos-rank">10</div>
+    <div>
+      <div class="dos-id">
+        <h2>Urban intelligence from transit fleets</h2>
+        <span class="mono" style="color:var(--muted);font-size:.85rem">SIH26124</span>
+      </div>
+      <p style="color:var(--ink-2);max-width:64ch">One bus fleet, one ordinary day&rsquo;s driving, a whole city&rsquo;s road asset register.</p>
+      <div class="dos-meta">
+        <div><span class="lab">Sponsor</span><span>Bharat Electronics Limited</span></div>
+        <div><span class="lab">Score note</span><span>Innovation cut 8 &rarr; 5</span></div>
+        <div><span class="lab">Problem-quality score</span><span class="mono">6.85 / 10</span></div>
+        <div><span class="lab">Team strength</span><span class="mono" style="color:var(--stop)">2 / 5</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dos-body">
+    <div class="blk">
+      <h3>The problem</h3>
+      <ul class="pts">
+        <li><strong>Who has it:</strong> municipal road maintenance and traffic departments, city transport undertakings, and road users.</li>
+        <li><strong>What hurts:</strong> cities learn about potholes, missing dividers, faded crossings, damaged signage and waterlogging through complaints and periodic inspection &mdash; slow, incomplete, and structurally biased toward the neighbourhoods that complain loudest.</li>
+        <li><strong>The idea, and it is a good one:</strong> a fleet with an existing, funded reason to drive every road every day makes marginal sensing nearly free.</li>
+      </ul>
+    </div>
+
+    <div class="blk">
+      <h3>Root cause</h3>
+      <dl class="rca">
+        <dt>Symptom</dt><dd>Municipalities respond to road defects reactively and with incomplete situational awareness.</dd>
+        <dt>Cause</dt><dd>The cost of sensing coverage. Continuous city-wide observation has needed dense fixed cameras or dedicated survey fleets, both scaling in cost with area. Bus cameras were procured as a recording device rather than a sensing device &mdash; so a city-wide sensor network is already installed, funded, running, and entirely unused. The asset exists; the intent never did.</dd>
+        <dt>Evidence</dt><dd><span class="tag t-fact">Fact, and the model demonstrably works</span> Hayden AI runs bus-mounted edge-AI perception at scale; on enforced NYC MTA routes bus speeds rose 5&ndash;30%, blocked bus stops fell 40% and collisions fell 20%. <span class="tag t-inf">Unsupported</span> that an Indian state transport undertaking would grant camera-feed access &mdash; and the entire statement rests on that assumption.</dd>
+      </dl>
+    </div>
+
+    <div class="blk">
+      <h3>What already exists</h3>
+      <ul class="pts">
+        <li><strong>Hayden AI</strong> &mdash; the direct proof point and the direct competitor. Bus-mounted, behind-the-windshield edge AI, US market leader in mobile bus-lane enforcement. Different primary use case, identical architecture.</li>
+        <li><strong>Nexar</strong> &mdash; crowdsourced dashcam road intelligence across 450 billion-plus kilometres, with a dedicated road-inventory product.</li>
+        <li><strong>RoadBotics</strong> (a Michelin company) &mdash; smartphone-camera road assessment sold directly to municipalities. Precisely the road-defect half, already productised.</li>
+        <li><strong>Mobileye REM</strong> &mdash; crowdsourced road mapping across 200 million-plus vehicles.</li>
+        <li><strong>India Driving Dataset and RDD2022</strong> &mdash; the one piece of good news: the perception models are trainable without any bus access at all.</li>
+      </ul>
+    </div>
+
+    <div class="blk">
+      <h3>The gap</h3>
+      <div class="chain">
+        <div><span class="lab">Exists</span>Hayden AI, Nexar, RoadBotics, Mobileye REM</div>
+        <div><span class="lab">Limitation</span>Enforcement-focused or dashcam-crowdsourced rather than transit-fleet based; all Western-market; none combines defect inventory, congestion analytics and incident response for Indian conditions.</div>
+        <div><span class="lab">Unmet need</span>Repeated-pass de-duplication and confidence accrual &mdash; the same pothole seen forty times a day becoming one asset whose confidence grows, not forty alerts.</div>
+        <div><span class="lab">Why it matters</span>Once a fleet is instrumented, the marginal cost of city-wide coverage approaches zero.</div>
+      </div>
+      <p style="font-size:.94rem;color:var(--ink-2)">Stated plainly: the reframing the statement presents as novel is an established commercial category with well-funded incumbents. That is what cut its Innovation score from 8 to 5.</p>
+    </div>
+
+    <div class="blk">
+      <h3>Why it is not your pick</h3>
+      <ul class="pts">
+        <li><strong>The premise you cannot secure is the whole product.</strong> Nothing in the statement works without camera-feed access from a state transport undertaking, and there is no evidence any team gets that in twenty days.</li>
+        <li><strong>You would be pitching against Hayden AI&rsquo;s architecture.</strong> A judge who knows the category will ask what is new, and &ldquo;Indian road classes&rdquo; is a thinner answer than it sounds when RDD2022 is public.</li>
+        <li><strong>The hard part is unglamorous and still hard.</strong> Spatial de-duplication and asset lifecycle tracking decide whether this is useful, and they are the parts a hackathon demo hides.</li>
+        <li><strong>ANPR-based offender tracking is a separate product</strong> with privacy and legal exposure the road-condition case does not carry. Mixing them in one pitch invites the wrong question.</li>
+      </ul>
+    </div>
+  </div>
+</article>
+
+<section id="belowline" style="margin-top:96px">
+  <div class="sechead">
+    <h2>Eleven and twelve</h2>
+    <p style="color:var(--ink-2);max-width:68ch">Two statements that were fully researched and finished outside the ten. Both are here so the cut is visible rather than silent.</p>
+  </div>
+
+  <div class="note" style="margin-top:8px">
+    <h3><svg viewBox="0 0 16 16" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 8h11"/></svg>SIH26143 &middot; Oil spill attribution (NTRO) &mdash; 2.6</h3>
+    <p>Problem-quality 7.00. A genuinely valuable idea: produce an evidence package rather than a detection &mdash; a ranked suspect list with the drift hindcast and AIS reconstruction attached. It is out because EMSA&rsquo;s <strong style="color:var(--ink)">CleanSeaNet has done exactly this since 2007</strong>, issuing attributed alerts within 30 minutes, so the work is a jurisdictional port rather than an invention; because SAR look-alikes remain an unsolved false-positive source; and because the best-documented recent Indian incidents at Ennore were land and refinery origin, not vessel discharge, which weakens the premise itself.</p>
+  </div>
+
+  <div class="note" style="margin-top:16px">
+    <h3><svg viewBox="0 0 16 16" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 8h11"/></svg>SIH26104 &middot; Voice cloning detection (AICTE) &mdash; 2.4</h3>
+    <p>Problem-quality 7.50, and the largest documented financial harm in the catalogue: <span class="mono">&#8377;22,495</span> crore lost to cyber fraud in India in 2025 per MHA and I4C, with 47% of Indian adults reporting exposure to voice-cloning scams against a 25% global average. It still finishes last, and the reason is worth internalising: <strong style="color:var(--ink)">the demo actively conceals the failure mode.</strong> ASVspoof&nbsp;5 exists because detectors trained on known attacks collapse on unknown ones, and no Indian-language telephony spoof corpus exists to substantiate the differentiation claim. This is the statement where a strong hackathon result is <em>least</em> predictive of real performance &mdash; and it carries the highest herd risk in the catalogue, so you would be judged against many polished, shallow entries.</p>
+  </div>
+</section>
+
+<section id="plan">
+  <div class="sechead">
+    <h2>The next 48 hours</h2>
+    <p style="color:var(--ink-2);max-width:68ch">At the internal round you do not need to be the smartest team, only the most dependable one. The goal is not a finished product &mdash; it is <strong>one thing that works, one piece of evidence nobody else has, and one number</strong>. Use the official SIH idea-presentation template rather than a deck of your own.</p>
+  </div>
+
+  <div class="plan">
+    <div><span class="when">Tonight</span><span class="what"><b>Decide and stop debating.</b> Confirm SIH26229 is live on sih.gov.in &mdash; it is absent from the circulating PDF, so check the portal itself. Assign the missing field-research role to your presenter. Message your SPOC that you have picked, and ask one genuine question.</span></div>
+    <div><span class="when">Tonight</span><span class="what"><b>Backend skeleton only.</b> Local database, lot record, offline queue, sync stub. No interface yet.</span></div>
+    <div><span class="when">Day 1 &middot; morning</span><span class="what"><b>Go to a scrap dealer.</b> Two hours. Photograph material, record audio in Marathi with permission, and ask the question that matters: would you travel further for a better rate, or are you tied to your current buyer? Get current &#8377;/kg for three categories.</span></div>
+    <div><span class="when">Day 1 &middot; morning</span><span class="what"><b>Build the single slice.</b> Photograph a lot, choose category, enter weight, get a value estimate, match an authorised recycler, produce a signed handover record. Icons and Marathi labels from the start, not retrofitted.</span></div>
+    <div><span class="when">Day 1 &middot; afternoon</span><span class="what"><b>Wire in the real data</b> from the morning. Your app now runs on material you collected today, which almost no other team can say.</span></div>
+    <div><span class="when">Day 1 &middot; evening</span><span class="what"><b>Write the unit economics on one slide.</b> Current &#8377;/kg against platform &#8377;/kg for one collector for one month, assumptions listed. Rough and honest beats polished and invented.</span></div>
+    <div><span class="when">Day 2 &middot; morning</span><span class="what"><b>Deck, then record the demo video.</b> Six to eight slides. Record before you rehearse &mdash; the backup must exist before the panic does.</span></div>
+    <div><span class="when">Day 2 &middot; afternoon</span><span class="what"><b>Rehearse three times</b>, every member speaking at least once. Build the backup answers. In the live demo, <b>switch on airplane mode mid-flow</b> and keep going &mdash; proving offline works beats asserting it.</span></div>
+  </div>
+
+  <div class="note good" style="margin-top:26px">
+    <h3><svg viewBox="0 0 16 16" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5"/></svg>The question to prepare hardest</h3>
+      <p>"Recykal already does this &mdash; why do you exist?" The answer is that Recykal.Market onboards <em>aggregators</em>: businesses with a smartphone, a ledger and a GST number. You onboard the person below them, who has none of those. Say it in one sentence, then show the collector saying it in their own words on video. That is the moment the room decides.</p>
+  </div>
+
+  <div class="note" style="margin-top:16px">
+    <h3><svg viewBox="0 0 16 16" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 14s5.2-3.1 5.2-7A5.2 5.2 0 0 0 2.8 7c0 3.9 5.2 7 5.2 7z"/><circle cx="8" cy="7" r="1.7"/></svg>If the field visit is impossible</h3>
+    <p>Switch to rank 3. Its field research is thirty photographs in a supermarket, doable in twenty minutes at any hour. A statement you can evidence beats a better statement you cannot &mdash; and do not take rank 1 without the collector interview, because the interview <em>is</em> the advantage.</p>
+  </div>
+</section>
+
+<footer>
+  <p><strong style="color:var(--ink-2)">Sources.</strong> Problem statements from <a href="https://www.sih.gov.in/sih2026PS">sih.gov.in/sih2026PS</a>, read live with full descriptions. E-waste framework: <a href="https://www.pib.gov.in/PressReleasePage.aspx?PRID=1986201">PIB on the E-Waste (Management) Rules 2022</a> and <a href="https://www.downtoearth.org.in/waste/70k-fake-certificates-major-polluters-missing-misuse-of-epr-legislation-worsening-indias-plastic-problem-shows-cse-report">CSE via Down To Earth on fake EPR certificates</a>. Health: <a href="https://www.pib.gov.in/PressReleaseIframePage.aspx?PRID=2023289">PIB on ABHA Scan &amp; Share</a>. Adoption terms: <a href="https://www.sih.gov.in/projectImplementation">SIH project-implementation guidelines</a>. Competitors reviewed include <a href="https://en.wikipedia.org/wiki/Recykal">Recykal</a>, <a href="https://www.kabadiwallaconnect.in/">Kabadiwalla Connect</a>, <a href="https://ekascribe.ai/">EkaScribe</a>, <a href="https://www.phreesia.com/products/registration/">Phreesia</a>, <a href="https://www.csir.res.in/en/documents/tkdl">TKDL</a> and <a href="https://www.gs1india.org/services/smart-consumer">Smart Consumer</a>.</p>
+  <p>Claims are marked <span class="tag t-fact">Fact</span> where sourced and <span class="tag t-inf">Inference</span> where reasoned. Scores are analytical judgements, not measurements. Where evidence was insufficient to establish a causal claim, this page says so rather than asserting one.</p>
+</footer>
+
+</div>
+
+<script>
+(function(){
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(!reduce && 'IntersectionObserver' in window){
+    var meters = document.querySelectorAll('.meter');
+    var mo = new IntersectionObserver(function(entries){
+      entries.forEach(function(e, i){
+        if(e.isIntersecting){
+          var el = e.target;
+          setTimeout(function(){ el.classList.add('on'); }, i * 55);
+          mo.unobserve(el);
+        }
+      });
+    }, {rootMargin:'0px 0px -12% 0px', threshold:0.2});
+    meters.forEach(function(m){ mo.observe(m); });
+  }
+
+  var links = Array.prototype.slice.call(document.querySelectorAll('.rail a'));
+  var targets = links.map(function(a){ return document.querySelector(a.getAttribute('href')); }).filter(Boolean);
+  if(targets.length && 'IntersectionObserver' in window){
+    var so = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if(e.isIntersecting){
+          links.forEach(function(a){ a.removeAttribute('aria-current'); });
+          var i = targets.indexOf(e.target);
+          if(i > -1) links[i].setAttribute('aria-current','true');
+        }
+      });
+    }, {rootMargin:'-15% 0px -70% 0px'});
+    targets.forEach(function(t){ so.observe(t); });
+  }
+})();
+</script>

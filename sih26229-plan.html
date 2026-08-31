@@ -1,0 +1,773 @@
+<title>SIH26229 Build Plan</title>
+<!--
+Companion to the ranking dossier. Same design system, different job: the ranking closes a decision, this one closes a build.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Literata:opsz,wght@7..72,400;7..72,500;7..72,600&family=Spline+Sans+Mono:wght@400;500;600&display=swap">
+
+<style>
+:root{
+  --paper:#FBFBFC;
+  --raise:#FFFFFF;
+  --sunk:#F2F3F6;
+  --ink:#0E1116;
+  --ink-2:#3C4453;
+  --muted:#5B6373;
+  --rule:#DFE2E9;
+  --rule-soft:#EAECF1;
+  --accent:#24405E;
+  --accent-tint:#EAEFF6;
+  --go:#1C6B45;
+  --go-tint:#E6F1EA;
+  --hold:#8A6516;
+  --hold-tint:#F6EFDD;
+  --stop:#A43F2E;
+  --stop-tint:#F7E9E5;
+  --bar:#E4E7ED;
+  --shade:#0E1116;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#0C0E12;
+    --raise:#13161C;
+    --sunk:#171B22;
+    --ink:#E9EBEF;
+    --ink-2:#B4BBC7;
+    --muted:#949DAC;
+    --rule:#262B34;
+    --rule-soft:#1D222A;
+    --accent:#9CB8DC;
+    --accent-tint:#15202E;
+    --go:#63C395;
+    --go-tint:#0F2118;
+    --hold:#D3AC5E;
+    --hold-tint:#221B0F;
+    --stop:#E0897A;
+    --stop-tint:#241614;
+    --bar:#252A33;
+    --shade:#000000;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0C0E12;
+  --raise:#13161C;
+  --sunk:#171B22;
+  --ink:#E9EBEF;
+  --ink-2:#B4BBC7;
+  --muted:#949DAC;
+  --rule:#262B34;
+  --rule-soft:#1D222A;
+  --accent:#9CB8DC;
+  --accent-tint:#15202E;
+  --go:#63C395;
+  --go-tint:#0F2118;
+  --hold:#D3AC5E;
+  --hold-tint:#221B0F;
+  --stop:#E0897A;
+  --stop-tint:#241614;
+  --bar:#252A33;
+  --shade:#000000;
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;overflow-x:clip;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:Literata,Georgia,serif;
+  font-size:17px;
+  line-height:1.65;
+  font-optical-sizing:auto;
+  -webkit-font-smoothing:antialiased;
+}
+::selection{background:var(--accent);color:var(--paper)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
+*{scrollbar-width:thin;scrollbar-color:var(--rule) transparent}
+*::-webkit-scrollbar{height:9px;width:9px}
+*::-webkit-scrollbar-thumb{background:var(--rule);border-radius:9px}
+*::-webkit-scrollbar-track{background:transparent}
+
+/* ---------- structure ---------- */
+.page{max-width:1180px;margin:0 auto;padding:0 28px 120px}
+.spine{max-width:68ch}
+
+h1,h2,h3,.lab,.rankno,th{font-family:Archivo,"Helvetica Neue",Arial,sans-serif}
+h1{
+  font-size:clamp(2.6rem,6.2vw,4.4rem);font-weight:700;line-height:.98;
+  letter-spacing:-.035em;margin:0;text-wrap:balance;
+}
+h2{
+  font-size:clamp(1.5rem,2.6vw,2rem);font-weight:600;line-height:1.12;
+  letter-spacing:-.025em;margin:0;text-wrap:balance;
+}
+h3{font-size:1.08rem;font-weight:600;letter-spacing:-.012em;margin:0}
+p{margin:0}
+.lab{
+  font-size:.7rem;font-weight:600;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--muted);
+}
+.mono,.num,td.n,th.n,.code{
+  font-family:"Spline Sans Mono",ui-monospace,SFMono-Regular,monospace;
+  font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;
+}
+
+/* ---------- masthead ---------- */
+header.top{padding:72px 0 0}
+.rule-hair{height:1px;background:var(--rule);border:0;margin:0}
+.deck{
+  font-size:1.24rem;line-height:1.5;color:var(--ink-2);max-width:62ch;margin-top:22px;
+}
+.decision{
+  margin-top:30px;display:flex;flex-wrap:wrap;gap:18px 34px;align-items:flex-end;
+  padding:22px 0 30px;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
+}
+.decision .big{display:flex;flex-direction:column;gap:5px}
+.decision .big .v{
+  font-family:Archivo,sans-serif;font-size:2.1rem;font-weight:700;letter-spacing:-.03em;line-height:1;
+  font-variant-numeric:tabular-nums;
+}
+.decision .big .v.code{font-family:"Spline Sans Mono",monospace;font-size:1.7rem;font-weight:600}
+
+/* ---------- matrix ---------- */
+.scroller{overflow-x:auto;border:1px solid var(--rule);border-radius:14px;background:var(--raise)}
+table{border-collapse:collapse;width:100%;min-width:720px;font-size:.9rem}
+thead th{
+  font-size:.66rem;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);
+  text-align:left;padding:14px 14px 11px;border-bottom:1px solid var(--rule);white-space:nowrap;
+  background:var(--sunk);
+}
+tbody td{padding:14px;border-bottom:1px solid var(--rule-soft);vertical-align:middle}
+tbody tr:last-child td{border-bottom:0}
+tbody tr.dim{color:var(--muted)}
+td.n,th.n{text-align:right;white-space:nowrap}
+.rankno{
+  font-family:"Spline Sans Mono",monospace;font-size:1.5rem;font-weight:600;
+  letter-spacing:-.04em;line-height:1;font-variant-numeric:tabular-nums;
+}
+tr.dim .rankno{color:var(--muted)}
+.ps{font-family:"Spline Sans Mono",monospace;font-size:.8rem;font-weight:500;color:var(--muted);display:block;margin-bottom:2px}
+.nm{font-family:Archivo,sans-serif;font-weight:600;font-size:.95rem;letter-spacing:-.01em}
+.avg{font-family:"Spline Sans Mono",monospace;font-size:1.06rem;font-weight:600;font-variant-numeric:tabular-nums}
+
+/* verdict marks &mdash; drawn, never colour alone */
+.mark{display:inline-flex;align-items:center;gap:7px;font-family:Archivo,sans-serif;font-size:.72rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+.mark svg{flex:0 0 auto;width:15px;height:15px}
+.m-go{color:var(--go)}
+.m-hold{color:var(--accent)}
+.m-stop{color:var(--stop)}
+
+/* score bar */
+.meter{display:flex;align-items:center;gap:10px;min-width:132px}
+.meter .track{position:relative;flex:1;height:5px;background:var(--bar);border-radius:3px;overflow:hidden}
+.meter .track > i{
+  display:block;height:100%;border-radius:3px;background:var(--accent);
+  width:var(--w);transform-origin:left center;
+}
+.meter.go .track > i{background:var(--go)}
+.meter.stop .track > i{background:var(--stop)}
+@keyframes fillbar{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.meter.on .track > i{animation:fillbar .9s cubic-bezier(.16,1,.3,1) both}
+
+/* ---------- sections ---------- */
+section{padding-top:76px}
+.sechead{display:flex;flex-direction:column;gap:12px;padding-bottom:18px;border-bottom:1px solid var(--rule);margin-bottom:30px}
+
+.note{
+  border:1px solid var(--rule);background:var(--sunk);border-radius:14px;
+  padding:20px 22px;display:flex;flex-direction:column;gap:11px;
+}
+.note.warn{background:var(--hold-tint);border-color:color-mix(in srgb,var(--hold) 34%,transparent)}
+.note.good{background:var(--go-tint);border-color:color-mix(in srgb,var(--go) 30%,transparent)}
+.note h3{display:flex;align-items:center;gap:9px}
+.note.warn h3{color:var(--hold)}
+.note.good h3{color:var(--go)}
+.note p{font-size:.97rem;color:var(--ink-2);max-width:70ch}
+
+/* ---------- dossier ---------- */
+.dos{border-top:2px solid var(--ink);padding-top:26px;margin-top:64px}
+.dos.veto{border-top-color:var(--rule);}
+.dos-head{display:grid;grid-template-columns:auto 1fr;gap:22px;align-items:start}
+.dos-rank{
+  font-family:"Spline Sans Mono",monospace;font-size:clamp(2.6rem,7vw,4rem);font-weight:600;
+  line-height:.84;letter-spacing:-.05em;color:var(--ink);font-variant-numeric:tabular-nums;
+}
+.dos.veto .dos-rank{color:var(--muted)}
+.dos-id{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;margin-bottom:9px}
+.dos-meta{display:flex;flex-wrap:wrap;gap:6px 26px;margin-top:14px;font-size:.85rem;color:var(--ink-2)}
+.dos-meta > div{display:flex;flex-direction:column;gap:1px}
+.dos-body{display:flex;flex-direction:column;gap:34px;margin-top:34px}
+.blk{display:flex;flex-direction:column;gap:13px}
+.blk > h3{padding-bottom:8px;border-bottom:1px solid var(--rule-soft)}
+.blk p,.blk li{max-width:70ch}
+
+ul.pts{margin:0;padding-left:19px;display:flex;flex-direction:column;gap:9px;font-size:.97rem;color:var(--ink-2)}
+ul.pts strong{color:var(--ink);font-weight:600}
+ul.pts::marker{color:var(--muted)}
+
+dl.rca{display:grid;grid-template-columns:minmax(96px,auto) 1fr;gap:11px 22px;margin:0;font-size:.97rem}
+dl.rca dt{font-family:Archivo,sans-serif;font-size:.68rem;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);padding-top:5px}
+dl.rca dd{margin:0;color:var(--ink-2);max-width:70ch}
+
+ol.whys{margin:0;padding:0;list-style:none;counter-reset:w}
+ol.whys li{
+  counter-increment:w;display:grid;grid-template-columns:34px 1fr;gap:16px;
+  padding:11px 0;border-bottom:1px solid var(--rule-soft);font-size:.95rem;color:var(--ink-2);
+}
+ol.whys li:last-child{border-bottom:0;color:var(--ink)}
+ol.whys li::before{
+  content:counter(w);font-family:"Spline Sans Mono",monospace;font-size:.86rem;
+  color:var(--muted);padding-top:2px;font-variant-numeric:tabular-nums;
+}
+ol.whys li:last-child::before{color:var(--accent)}
+
+.chain{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:12px;overflow:hidden}
+.chain > div{background:var(--raise);padding:14px 15px;display:flex;flex-direction:column;gap:6px;font-size:.87rem;line-height:1.5;color:var(--ink-2)}
+
+.tag{
+  font-family:Archivo,sans-serif;font-size:.62rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+  padding:2px 6px;border-radius:4px;white-space:nowrap;
+}
+.t-fact{background:var(--go-tint);color:var(--go)}
+.t-inf{background:var(--hold-tint);color:var(--hold)}
+
+.claim{
+  font-family:Archivo,sans-serif;font-size:1.16rem;font-weight:500;line-height:1.38;
+  letter-spacing:-.018em;color:var(--ink);max-width:60ch;
+}
+
+.scores{display:flex;flex-direction:column}
+.srow{display:grid;grid-template-columns:150px 34px 1fr;gap:16px;align-items:center;padding:9px 0;border-bottom:1px solid var(--rule-soft)}
+.srow:last-child{border-bottom:0}
+.srow .cn{font-family:Archivo,sans-serif;font-size:.85rem;font-weight:500}
+.srow .cv{font-family:"Spline Sans Mono",monospace;font-size:.94rem;font-weight:600;text-align:right;font-variant-numeric:tabular-nums}
+.srow .rs{grid-column:1/-1;font-size:.86rem;color:var(--muted);line-height:1.5;max-width:70ch;margin-top:-3px}
+
+.calcbox{
+  font-family:"Spline Sans Mono",monospace;font-size:.79rem;line-height:1.75;color:var(--ink-2);
+  background:var(--sunk);border:1px solid var(--rule);border-radius:12px;padding:15px 17px;
+  overflow-x:auto;white-space:pre;font-variant-numeric:tabular-nums;
+}
+.total{display:flex;align-items:baseline;gap:13px;padding-top:14px;border-top:2px solid var(--ink);margin-top:12px}
+.total .tv{font-family:"Spline Sans Mono",monospace;font-size:2.1rem;font-weight:600;letter-spacing:-.035em;font-variant-numeric:tabular-nums}
+
+/* ---------- rail ---------- */
+.rail{display:none}
+@media (min-width:1120px){
+  .page{display:grid;grid-template-columns:1fr 168px;gap:56px;align-items:start}
+  .page > *{grid-column:1}
+  .rail{
+    display:flex;grid-column:2;grid-row:1/-1;position:sticky;top:34px;
+    flex-direction:column;gap:2px;padding-top:96px;
+  }
+  .rail a{
+    display:grid;grid-template-columns:20px 1fr;gap:9px;align-items:baseline;
+    padding:7px 9px;border-radius:8px;text-decoration:none;color:var(--muted);
+    font-family:Archivo,sans-serif;font-size:.76rem;font-weight:500;line-height:1.3;
+    border-left:1px solid transparent;
+  }
+  .rail a .rn{font-family:"Spline Sans Mono",monospace;font-size:.72rem}
+  .rail a:hover{background:var(--sunk);color:var(--ink-2)}
+  .rail a[aria-current="true"]{background:var(--accent-tint);color:var(--accent);font-weight:600}
+}
+
+/* ---------- plan ---------- */
+.plan{display:flex;flex-direction:column;border:1px solid var(--rule);border-radius:14px;overflow:hidden}
+.plan > div{display:grid;grid-template-columns:112px 1fr;gap:20px;padding:16px 20px;border-bottom:1px solid var(--rule-soft);background:var(--raise)}
+.plan > div:last-child{border-bottom:0}
+.plan .when{font-family:"Spline Sans Mono",monospace;font-size:.79rem;color:var(--accent);font-weight:500;padding-top:2px}
+.plan .what{font-size:.94rem;color:var(--ink-2);max-width:66ch}
+.plan .what b{color:var(--ink);font-weight:600}
+
+footer{margin-top:96px;padding-top:26px;border-top:1px solid var(--rule);font-size:.85rem;color:var(--muted);display:flex;flex-direction:column;gap:12px}
+footer p{max-width:76ch}
+a{color:var(--accent);text-decoration:underline;text-underline-offset:2px;text-decoration-thickness:1px;text-decoration-color:color-mix(in srgb,var(--accent) 42%,transparent)}
+a:hover{text-decoration-color:var(--accent)}
+
+@media (max-width:760px){
+  body{font-size:16px}
+  .page{padding:0 18px 80px}
+  .dos-head{grid-template-columns:1fr;gap:6px}
+  .dos-rank{font-size:2.4rem}
+  .srow{grid-template-columns:1fr 34px}
+  .srow .rs{grid-column:1/-1}
+  .plan > div{grid-template-columns:1fr;gap:5px}
+  dl.rca{grid-template-columns:1fr;gap:3px 0}
+  dl.rca dd{margin-bottom:9px}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+  .meter .track > i{transform:none}
+}
+</style>
+
+<style>
+.sched{display:flex;flex-direction:column;border:1px solid var(--rule);border-radius:14px;overflow:hidden;background:var(--raise)}
+.sched > div{display:grid;grid-template-columns:118px 1fr 132px;gap:0 22px;padding:16px 19px;border-bottom:1px solid var(--rule-soft)}
+.sched > div:last-child{border-bottom:0}
+.sched .when{font-family:"Spline Sans Mono",monospace;font-size:.79rem;color:var(--accent);font-variant-numeric:tabular-nums;padding-top:3px;line-height:1.5}
+.sched .what{font-size:.95rem;color:var(--ink-2);line-height:1.6}
+.sched .what b{color:var(--ink);font-weight:600;display:block;margin-bottom:4px;font-family:Archivo,sans-serif;font-size:.95rem;letter-spacing:-.005em}
+.sched .who{font-family:Archivo,sans-serif;font-size:.66rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding-top:4px;line-height:1.7}
+.sched .gate{background:var(--sunk)}
+.day{display:flex;align-items:baseline;gap:15px;margin:52px 0 18px}
+.day .n{font-family:"Spline Sans Mono",monospace;font-size:1.45rem;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+.day .t{font-family:Archivo,sans-serif;font-size:.7rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.day .r{margin-left:auto;font-size:.85rem;color:var(--muted)}
+.qa{display:flex;flex-direction:column;border-top:1px solid var(--rule)}
+.qa > div{padding:17px 0;border-bottom:1px solid var(--rule-soft)}
+.qa .q{font-family:Archivo,sans-serif;font-weight:600;color:var(--ink);font-size:.99rem;margin-bottom:7px;letter-spacing:-.008em}
+.qa .a{font-size:.95rem;color:var(--ink-2);max-width:74ch;line-height:1.65}
+.roles{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:12px;overflow:hidden}
+.roles > div{background:var(--raise);padding:15px 16px;display:flex;flex-direction:column;gap:6px}
+.roles .rl{font-family:Archivo,sans-serif;font-size:.66rem;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:var(--accent)}
+.roles .rd{font-size:.88rem;color:var(--ink-2);line-height:1.55}
+.cut{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:10px}
+.cut span{font-family:Archivo,sans-serif;font-size:.82rem;color:var(--muted);border:1px solid var(--rule);border-radius:9px;padding:9px 12px;text-decoration:line-through;text-decoration-color:var(--stop);text-decoration-thickness:1px}
+@media (max-width:720px){
+  .sched > div{grid-template-columns:1fr;gap:7px}
+  .sched .who{padding-top:0}
+  .day .r{display:none}
+}
+</style>
+
+<div class="page">
+
+<nav class="rail" aria-label="Sections of the build plan">
+  <a href="#approach"><span class="rn">01</span><span>The approach</span></a>
+  <a href="#build"><span class="rn">02</span><span>Architecture</span></a>
+  <a href="#cut"><span class="rn">03</span><span>What you refuse</span></a>
+  <a href="#hours"><span class="rn">04</span><span>The 48 hours</span></a>
+  <a href="#deck"><span class="rn">05</span><span>The deck</span></a>
+  <a href="#demo"><span class="rn">06</span><span>The demo</span></a>
+  <a href="#questions"><span class="rn">07</span><span>Questions</span></a>
+  <a href="#risks"><span class="rn">08</span><span>If it breaks</span></a>
+</nav>
+
+<header class="top">
+  <h1>Forty-eight hours,<br>three deliverables.</h1>
+  <p class="deck">Everything below assumes SIH26229 is confirmed live on sih.gov.in and the team has stopped debating. At an internal round you do not need the smartest team in the room, only the most dependable one &mdash; so the target is <em>one loop that works offline, one piece of evidence nobody else has, and one number</em>. Everything that does not serve those three is cut on sight.</p>
+
+  <div class="decision">
+    <div class="big">
+      <span class="lab">Statement</span>
+      <span class="v code">SIH26229</span>
+    </div>
+    <div class="big">
+      <span class="lab">Working name</span>
+      <span class="v">Bhaav</span>
+    </div>
+    <div class="big">
+      <span class="lab">Screens to build</span>
+      <span class="v">6</span>
+    </div>
+    <div class="big">
+      <span class="lab">Full rehearsals</span>
+      <span class="v">3</span>
+    </div>
+  </div>
+</header>
+
+<section id="approach" style="padding-top:44px">
+  <div class="sechead">
+    <h2>The approach</h2>
+    <p style="color:var(--ink-2);max-width:68ch">One sentence, one loop, one artefact. If any part of the build cannot be traced back to these three, it does not get built this week.</p>
+  </div>
+
+  <div class="note good">
+    <h3><svg viewBox="0 0 16 16" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5"/></svg>The sentence you open and close with</h3>
+    <p style="font-size:1.08rem;color:var(--ink)">&ldquo;Every platform in e-waste onboards a <em>business</em>. We onboard the person below them &mdash; and going formal pays a Nagpur collector more the same day, because the handover record we produce is worth money to the recycler and we share that value back at the point of sale.&rdquo;</p>
+    <p>Say it in the first thirty seconds. Say it again at the end. Every slide in between is evidence for one clause of it.</p>
+  </div>
+
+  <div class="note" style="margin-top:16px">
+    <h3><svg viewBox="0 0 16 16" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 1.8v12.4M8 1.8L4.4 5.4M8 1.8l3.6 3.6"/></svg>Rename the product tonight</h3>
+    <p><strong style="color:var(--ink)">Kabadiwalla Connect is a real Chennai social enterprise</strong>, operating since 2014 with World Economic Forum and Shell backing, and <strong style="color:var(--ink)">The Kabadiwala</strong> in Bhopal is a second collision. Presenting under either name to a panel is an unforced error that costs you nothing to avoid. Keep the problem-statement title in the submission form; give the product its own name.</p>
+    <p><strong style="color:var(--ink)">Bhaav</strong> is the suggestion &mdash; it is the exact word a collector uses for the rate they are not told, it reads in Marathi and Hindi, and it names the thing you actually deliver. <em>Tolmol</em> (weigh-and-price) is the alternative. Pick one in five minutes and move on; the name is not worth an hour.</p>
+  </div>
+
+  <div class="blk" style="margin-top:40px">
+    <h3>The loop &mdash; this is the entire product</h3>
+    <p style="color:var(--ink-2);max-width:70ch">Six screens, one path, no branches. A collector with a &#8377;6,000 phone, no ledger, no GST number and no network completes this in under ninety seconds. Everything else in the statement is scope for the finale, not for Thursday.</p>
+    <ol class="whys" style="margin-top:18px">
+      <li><span><strong>New lot.</strong> One full-width button on an otherwise empty screen. Not a dashboard, not a login.</span></li>
+      <li><span><strong>Photograph the material.</strong> The photo is captured for the record first and for classification second &mdash; that ordering matters, and it is the reason the app works with no network.</span></li>
+      <li><span><strong>Confirm the category.</strong> An icon grid of six to eight scrap categories with Marathi labels, each spoken aloud on tap. The camera <em>suggests</em>; the collector <em>decides</em>. No free text anywhere in this flow.</span></li>
+      <li><span><strong>Enter the weight.</strong> Large numeric keypad, value spoken back in Marathi. This is where low-literacy design either works or is theatre.</span></li>
+      <li><span><strong>See the value, and who pays it.</strong> Rate &times; weight, large, spoken &mdash; then a ranked list of CPCB-authorised recyclers nearby with each one&rsquo;s rate and distance. This single screen is the price transparency the whole thesis rests on.</span></li>
+      <li><span><strong>Produce the handover record.</strong> Photo, category, weight, agreed rate, total, timestamp, GPS, collector ID, recycler counter-signature. Rendered as a QR the recycler scans and a slip the collector keeps. The lot lands in the earnings ledger. <strong>This artefact is the product.</strong></span></li>
+    </ol>
+  </div>
+
+  <div class="blk">
+    <h3>Why the handover record is the pitch, not a feature</h3>
+    <div class="chain">
+      <div><span class="lab">For the collector</span>The first receipt they have ever had. Proof of what they gave, to whom, at what rate.</div>
+      <div><span class="lab">For the recycler</span>Audit-grade evidence of physical tonnage, with photo, weight, time and place attached.</div>
+      <div><span class="lab">For the regulator</span>Exactly the artefact a certificate market compromised by roughly 700,000 fake certificates is missing.</div>
+      <div><span class="lab">For your pitch</span>It is why the recycler can afford to pay more, which is why the collector earns more, which is the only reason anyone adopts this.</div>
+    </div>
+    <p style="font-size:.94rem;color:var(--ink-2)">Most teams will build a marketplace and call the receipt a feature. Lead with the record and the economics close themselves.</p>
+  </div>
+</section>
+
+<section id="build">
+  <div class="sechead">
+    <h2>Architecture</h2>
+    <p style="color:var(--ink-2);max-width:68ch">Nothing here requires a trained model, which is precisely why the statement suits this team. The hard engineering is offline sync; the visible craft is the low-literacy interface; the AI is supporting and should be described that way out loud.</p>
+  </div>
+
+  <div class="blk">
+    <h3>The stack</h3>
+    <ul class="pts">
+      <li><strong>Collector app &mdash; Flutter with Drift or sqflite,</strong> single APK, minimum SDK low enough for an entry-level device. <em>Use whichever of Flutter or React Native someone on this team has already shipped.</em> Do not learn a framework this week; a familiar stack is worth more than the right one.</li>
+      <li><strong>Backend &mdash; FastAPI or Express with Postgres.</strong> Three endpoints is the whole surface: <span class="mono">POST /sync</span>, <span class="mono">GET /recyclers</span>, <span class="mono">GET /rates</span>. Anything beyond that is scope creep wearing a REST costume.</li>
+      <li><strong>Recycler console &mdash; one web page.</strong> Scan the QR, see the lot, counter-sign, done. Next.js if you like, plain HTML against the same API if you are short on time. Judges will look at it for forty seconds.</li>
+      <li><strong>Seed data &mdash; CPCB authorised-recycler lists are public,</strong> and the rates come from your own field visit. Load twenty real Nagpur-area recyclers, not two hundred fake ones.</li>
+    </ul>
+  </div>
+
+  <div class="blk">
+    <h3>The offline contract &mdash; the part that wins it</h3>
+    <p style="color:var(--ink-2);max-width:70ch">Offline-first is a stated requirement of the statement, and it is where a team that understands the user separates from a team that read the brief. Four rules, and they are also four good answers under questioning.</p>
+    <dl class="rca">
+      <dt>Local first</dt><dd>Every write commits to the local database and the UI advances immediately. Nothing in the collector flow ever awaits a network call. If a screen can show a spinner that depends on connectivity, it is built wrong.</dd>
+      <dt>Client IDs</dt><dd>Every record gets a UUID generated on the device, so no step needs a server round-trip to obtain an identity. This is what makes the whole chain work at zero bars.</dd>
+      <dt>Outbox</dt><dd>An append-only queue table with a <span class="mono">synced_at</span> column. Sync is a batch POST that the server upserts by UUID, so replaying it is harmless. Idempotent by construction, which is the correct answer when a judge asks about duplicates.</dd>
+      <dt>Immutable events</dt><dd>A handover record is a statement about something that happened, not mutable state, so it is append-only and conflict resolution is trivial. Corrections are new records that reference the old one. Say this in exactly these words if asked about sync conflicts &mdash; it demonstrates you chose the model rather than defaulted to it.</dd>
+    </dl>
+    <p style="font-size:.94rem;color:var(--ink-2)">Photos compress to roughly 200&nbsp;KB and upload separately and later. The record is valid before its photo has synced.</p>
+  </div>
+
+  <div class="blk">
+    <h3>Where AI sits &mdash; and where it must not</h3>
+    <ul class="pts">
+      <li><strong>Scrap classification is an accelerator, never a gate.</strong> Use an off-the-shelf hosted vision model to <em>pre-select</em> the category icon. If the call fails, times out, or there is no network, the icon grid is already on screen and the collector taps. <strong style="color:var(--ink)">In an offline-first app the classifier can never be on the critical path</strong> &mdash; state that as a design principle and it becomes a strength instead of a limitation.</li>
+      <li><strong>Price estimation is a lookup table,</strong> seeded from your field visit and published rates, and it should stay one until real data justifies more. A team that ships a regression model over eleven observations has told the judges something about itself.</li>
+      <li><strong>Fine-tuning is a promise, not a deliverable.</strong> Say plainly: the classifier is off-the-shelf today, and will be fine-tuned on the field photographs we are collecting. Honest scope beats an overclaim a judge can puncture.</li>
+      <li><strong>LangGraph is a stretch goal with a hard gate.</strong> A bounded Marathi voice assistant over your own price and recycler data is a legitimate use of the one AI skill this team has &mdash; but it gets built only if the core loop is finished and demo-stable by Day 1 evening. Not before. If the gate is missed, it becomes a roadmap slide and costs you nothing.</li>
+    </ul>
+  </div>
+
+  <div class="blk">
+    <h3>Privacy, said out loud</h3>
+    <p style="color:var(--ink-2);max-width:70ch">The statement <em>explicitly</em> asks you to avoid unnecessary personal data, and most teams will skim past that line. Collect no Aadhaar, require no name, make the phone number optional, and give the collector a local pseudonymous ID. Then say so on a slide. Privacy is a scoring line most competitors leave blank, and this costs you one design decision and thirty seconds of stage time.</p>
+  </div>
+</section>
+
+<section id="cut">
+  <div class="sechead">
+    <h2>What you refuse to build</h2>
+    <p style="color:var(--ink-2);max-width:68ch">Write this list on the wall. Every hour lost to something on it is an hour not spent on the loop, the evidence or the number &mdash; and each of these is a perfectly reasonable idea that will still be reasonable in three weeks.</p>
+  </div>
+  <div class="cut">
+    <span>User accounts and login</span>
+    <span>UPI and payments</span>
+    <span>Push notifications</span>
+    <span>Admin dashboard</span>
+    <span>Model training</span>
+    <span>Multi-city support</span>
+    <span>In-app chat</span>
+    <span>Ratings and reviews</span>
+    <span>Route optimisation</span>
+    <span>Blockchain anything</span>
+  </div>
+  <div class="note warn" style="margin-top:24px">
+    <h3><svg viewBox="0 0 16 16" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M8 1.8L15 14H1L8 1.8z"/><path d="M8 6.4v3.4M8 11.8v.1"/></svg>The trap this list exists to prevent</h3>
+    <p>Six people over two days will produce roughly ninety working hours, and the natural failure mode is six parallel half-features rather than one finished path. A judge cannot distinguish a login screen you built from one you skipped, but they can absolutely tell whether the handover record actually generates. <strong style="color:var(--ink)">Depth on one path, zero width.</strong></p>
+  </div>
+</section>
+
+<section id="hours">
+  <div class="sechead">
+    <h2>The forty-eight hours</h2>
+    <p style="color:var(--ink-2);max-width:68ch">Six people, six roles, three gates. The gates are the point: at each one you either have the thing or you take the stated fallback, and nobody negotiates about it at midnight.</p>
+  </div>
+
+  <div class="roles">
+    <div><span class="rl">Field</span><span class="rd">Your presenter, doubling as the domain and field-research role you are missing. Owns the scrap-dealer visit, the quotes, the unit economics and the pitch.</span></div>
+    <div><span class="rl">Mobile</span><span class="rd">The collector app and the offline layer. The single most load-bearing role for the demo.</span></div>
+    <div><span class="rl">Backend</span><span class="rd">Database, three endpoints, sync, seed data. Unblocks Mobile by the end of tonight and then supports.</span></div>
+    <div><span class="rl">Full-stack</span><span class="rd">Recycler console, handover-record rendering and QR, then the demo video.</span></div>
+    <div><span class="rl">Design</span><span class="rd">Icon set, Marathi strings, the six screens, then the deck. Ships icons before pixels.</span></div>
+    <div><span class="rl">QA &amp; data</span><span class="rd">Seeds the recycler and rate tables, breaks the app deliberately, owns the demo script and drills the question bank.</span></div>
+  </div>
+
+  <div class="day"><span class="n">00</span><span class="t">Tonight</span><span class="r">Four hours, then sleep. This is not optional.</span></div>
+  <div class="sched">
+    <div>
+      <div class="when">First 30 min</div>
+      <div class="what"><b>Confirm and commit</b>Open sih.gov.in/sih2026PS and verify SIH26229 is live &mdash; it is absent from the circulating 226-statement PDF and from the vuce.in mirror, so check the portal itself. Then stop debating the choice. Pick the product name in the same half hour.</div>
+      <div class="who">Everyone</div>
+    </div>
+    <div>
+      <div class="when">First 30 min</div>
+      <div class="what"><b>Email JNARDDC, Nagpur</b>Name the problem statement, introduce the team and ask three specific questions you actually want answered. A reply you can quote on a slide outranks any feature you could build with the same hour, and it can only arrive if the email goes tonight.</div>
+      <div class="who">Field</div>
+    </div>
+    <div>
+      <div class="when">Hours 1&ndash;3</div>
+      <div class="what"><b>Line up tomorrow&rsquo;s field visit</b>Find two working collectors and one scrap dealer within reach of campus, and confirm a morning time. Message your SPOC that the team has picked, and ask one genuine question. Draft the six interview questions.</div>
+      <div class="who">Field, QA</div>
+    </div>
+    <div>
+      <div class="when">Hours 1&ndash;4</div>
+      <div class="what"><b>Backend skeleton and schema</b>Postgres up, tables for lot, category, rate, recycler and handover, UUID primary keys, the three endpoints stubbed and returning fixtures. No interface work at all tonight.</div>
+      <div class="who">Backend</div>
+    </div>
+    <div>
+      <div class="when">Hours 1&ndash;4</div>
+      <div class="what"><b>App shell and local database</b>Project scaffolded, local schema mirroring the server, camera permission working, one screen navigating to the next with dummy data. The goal tonight is that the skeleton runs on a real phone.</div>
+      <div class="who">Mobile</div>
+    </div>
+    <div>
+      <div class="when">Hours 1&ndash;4</div>
+      <div class="what"><b>Icons before pixels</b>Draw the six to eight scrap-category icons and write the Marathi and Hindi strings. Hand them to Mobile before you design a single screen &mdash; the app is blocked on the icon set, not on the layout.</div>
+      <div class="who">Design</div>
+    </div>
+    <div class="gate">
+      <div class="when">Gate 1</div>
+      <div class="what"><b>Before anyone sleeps</b>The app skeleton runs on a physical phone, the schema exists on both sides, the icons are drawn, and the field visit is confirmed for the morning. If the field visit could not be arranged, read the fallback in section 08 now rather than at noon tomorrow.</div>
+      <div class="who">Check</div>
+    </div>
+  </div>
+
+  <div class="day"><span class="n">01</span><span class="t">Day one &mdash; evidence and the loop</span><span class="r">The day the pick either earns its advantage or loses it.</span></div>
+  <div class="sched">
+    <div>
+      <div class="when">08:00&ndash;11:00</div>
+      <div class="what"><b>The field visit &mdash; two hours minimum</b>Two collectors and one scrap dealer. Photograph every material category you can, on a phone, in real light &mdash; those photographs become your classifier&rsquo;s evidence and your slide imagery. Record audio in Marathi with explicit permission. Get current &#8377;/kg for at least three categories, written down.</div>
+      <div class="who">Field, QA</div>
+    </div>
+    <div>
+      <div class="when">08:00&ndash;11:00</div>
+      <div class="what"><b>Ask the one question that can invalidate the pick</b><em>&ldquo;If someone paid you ten rupees more per kilo but you had to travel four kilometres further, would you go?&rdquo;</em> and then <em>&ldquo;does your current buyer ever advance you money?&rdquo;</em> If the answer is that credit ties them to their aggregator, no interface fixes it &mdash; and you need to know that today, while the pitch can still absorb it honestly.</div>
+      <div class="who">Field</div>
+    </div>
+    <div>
+      <div class="when">08:00&ndash;14:00</div>
+      <div class="what"><b>Build the single slice, end to end</b>All six screens against local data: new lot, photo, category grid, weight, value and recycler list, handover record. Offline the whole way. Marathi labels and icons from the first commit, never retrofitted at the end.</div>
+      <div class="who">Mobile, Design</div>
+    </div>
+    <div>
+      <div class="when">09:00&ndash;14:00</div>
+      <div class="what"><b>Sync, console and seed data</b>Backend finishes the outbox sync and loads twenty real CPCB-authorised recyclers around Nagpur. Full-stack builds the recycler console: scan QR, view lot, counter-sign. QA seeds the rate table with placeholder values that get replaced this afternoon.</div>
+      <div class="who">Backend, Full-stack</div>
+    </div>
+    <div>
+      <div class="when">14:00&ndash;17:00</div>
+      <div class="what"><b>Wire in this morning&rsquo;s real data</b>Replace every placeholder rate with the numbers you collected today. Load the field photographs. Your app now runs on material gathered this morning, twelve kilometres from the sponsoring institute &mdash; which is a sentence almost no other team can say, so make sure it is true.</div>
+      <div class="who">Backend, QA</div>
+    </div>
+    <div>
+      <div class="when">14:00&ndash;18:00</div>
+      <div class="what"><b>The number</b>One slide. Current &#8377;/kg against platform &#8377;/kg for one collector over one month, with every assumption written underneath it. Rough and honest beats polished and invented, and the statement asks for this unit-economics assessment explicitly &mdash; so having it is a scoring line, not a flourish.</div>
+      <div class="who">Field</div>
+    </div>
+    <div>
+      <div class="when">18:00&ndash;21:00</div>
+      <div class="what"><b>Break it on purpose</b>Airplane mode through the entire flow. Kill the app mid-lot and reopen it. Fill the outbox with fifteen records, then reconnect and watch them sync. Low battery, cracked screen, one hand, bright sunlight. Every bug found tonight is a bug not found on stage.</div>
+      <div class="who">QA, Mobile</div>
+    </div>
+    <div class="gate">
+      <div class="when">Gate 2</div>
+      <div class="what"><b>Day 1, 21:00</b>The loop runs end to end offline on a physical phone, on real rates, and a handover record generates and syncs. If it does, LangGraph unlocks as a stretch goal for tomorrow morning. If it does not, the stretch goal is dead and tomorrow morning goes to finishing the loop &mdash; decide it here, not at noon.</div>
+      <div class="who">Check</div>
+    </div>
+  </div>
+
+  <div class="day"><span class="n">02</span><span class="t">Day two &mdash; the pitch</span><span class="r">Feature freeze at 12:00. No exceptions.</span></div>
+  <div class="sched">
+    <div>
+      <div class="when">08:00&ndash;12:00</div>
+      <div class="what"><b>Deck, in the official template</b>Download the current idea-presentation template from sih.gov.in and use it rather than a deck of your own &mdash; format compliance is free marks and its absence is noticed. Section 05 below maps what goes on each slide. <span class="tag t-inf">Verify</span> the template&rsquo;s current section list on the portal; it has changed between editions.</div>
+      <div class="who">Field, Design</div>
+    </div>
+    <div>
+      <div class="when">08:00&ndash;12:00</div>
+      <div class="what"><b>Last build work, then freeze</b>Polish only what appears in the demo. Nothing new enters the codebase after noon. If Gate 2 passed, this is the LangGraph window; if it did not, this is the loop-finishing window.</div>
+      <div class="who">Mobile, Backend</div>
+    </div>
+    <div>
+      <div class="when">12:00&ndash;13:30</div>
+      <div class="what"><b>Record the demo video before you rehearse</b>Screen recording of the full loop with a voice-over, four minutes, exported and copied to two phones and a laptop. Record it <em>before</em> rehearsal, so the backup exists before the panic does. This is the single highest-value ninety minutes of Day 2.</div>
+      <div class="who">Full-stack, QA</div>
+    </div>
+    <div>
+      <div class="when">13:30&ndash;16:00</div>
+      <div class="what"><b>Three full rehearsals, every member speaking</b>Timed, standing, with the live demo running each time. Rehearsal one is bad, rehearsal two finds the transitions, rehearsal three is the one you give. A panel notices immediately when only one person can speak about the work.</div>
+      <div class="who">Everyone</div>
+    </div>
+    <div>
+      <div class="when">16:00&ndash;18:00</div>
+      <div class="what"><b>Drill the question bank</b>QA plays hostile judge with section 07 and does not go easy. Every answer lands in one or two sentences; anyone who needs a paragraph does not know the answer yet. Build the four backup slides: competitors, the credit objection, cold start, privacy.</div>
+      <div class="who">Everyone</div>
+    </div>
+    <div>
+      <div class="when">18:00&ndash;19:00</div>
+      <div class="what"><b>Freeze and pack</b>Repo tagged with a README a stranger can run. Demo phone charged, airplane mode tested one last time, video on two devices, deck exported to PDF and emailed to two people. Then stop.</div>
+      <div class="who">Everyone</div>
+    </div>
+    <div class="gate">
+      <div class="when">Gate 3</div>
+      <div class="what"><b>Day 2, 19:00</b>Working demo, recorded backup, deck in the official template, and six people who can each answer three questions without looking at anyone else. That is a nomination-grade submission. Anything still unfinished at this point is a roadmap slide, and saying so confidently is stronger than hiding it.</div>
+      <div class="who">Check</div>
+    </div>
+  </div>
+</section>
+
+<section id="deck">
+  <div class="sechead">
+    <h2>The deck</h2>
+    <p style="color:var(--ink-2);max-width:68ch">Use the official SIH idea-presentation template. Its sections have historically been Proposed Solution, Technical Approach, Feasibility and Viability, Impact and Benefits, and Research and References &mdash; <span class="tag t-inf">Inference</span> based on prior editions, so download the current one and confirm before you build. What follows is what belongs in each, for this statement.</p>
+  </div>
+
+  <dl class="rca">
+    <dt>Title</dt><dd>Product name, problem-statement code and title, team and institute. Nothing else. Ten seconds.</dd>
+    <dt>Proposed solution</dt><dd>The sentence from section 01, then the six-screen loop as six screenshots of <em>your</em> app. Not a diagram of a system, a picture of a person using it. Name the user precisely: an individual informal collector, cash, low literacy, entry-level Android, no GST number.</dd>
+    <dt>Technical approach</dt><dd>The offline contract &mdash; local-first writes, client-generated IDs, append-only outbox, immutable handover events. Then the stack in one line each. Then, explicitly, where AI is and is not: classification accelerates, it does not gate; pricing is a lookup, not a model. Judges reward a team that knows which parts do not need AI.</dd>
+    <dt>Feasibility and viability</dt><dd>The unit-economics slide &mdash; current &#8377;/kg against platform &#8377;/kg, one collector, one month, assumptions listed. Then the risks you already know: two-sided cold start, the credit hypothesis, Recykal extending downward. Naming your own risks before a judge does is the strongest move available on this slide.</dd>
+    <dt>Impact and benefits</dt><dd>1.39 million tonnes of e-waste in FY 2024-25 with roughly 95% handled informally; EPR collection targets rising to 80% by FY 2027-28; a certificate market with roughly 700,000 fake certificates documented. Then the local layer: the Nagpur study finding around 59% of surveyed scrap dealers already dismantling electronics, and Maharashtra&rsquo;s four planned circular-economy parks, one in Nagpur.</dd>
+    <dt>Research and references</dt><dd>CPCB, the E-Waste Rules 2022, the CSE certificate findings, the Nagpur field study &mdash; and, if the reply has arrived, JNARDDC quoted directly. A quoted sponsor on the references slide changes how the whole deck reads.</dd>
+  </dl>
+
+  <div class="note" style="margin-top:26px">
+    <h3><svg viewBox="0 0 16 16" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6.2"/><path d="M8 5.2v3.4l2.2 1.4"/></svg>What the official rubric actually weights</h3>
+    <p>Five criteria at ten marks each, fifty total &mdash; Innovation and Originality, Feasibility and Realistic Implementation, Social and Environmental Impact or Business Value, Technical Execution, and Presentation. Twenty per cent apiece. <span class="tag t-fact">Fact</span></p>
+    <p>The circulating claim that presentation is now worth around half the marks is community intelligence rather than published policy. Treat it as a reason to over-invest in the pitch, never as permission to under-build: on the official sheet, Technical Execution and Feasibility together outweigh Presentation two to one.</p>
+  </div>
+</section>
+
+<section id="demo">
+  <div class="sechead">
+    <h2>The four-minute demo</h2>
+    <p style="color:var(--ink-2);max-width:68ch">Run it in this order every time, live, with the recorded video ready on a second device. The airplane-mode moment is the whole demo &mdash; everything before it is setup and everything after it is consequence.</p>
+  </div>
+
+  <ol class="whys">
+    <li><span><strong>Start in airplane mode. Say so.</strong> Turn it on in front of the room before you touch the app. &ldquo;This phone has no network for the next three minutes.&rdquo; Proving offline works beats asserting it, and the claim is unfalsifiable if you assert it from a connected device.</span></li>
+    <li><span><strong>Photograph real scrap.</strong> Bring actual material to the room if you can &mdash; a handful of cables and a circuit board in a bag costs nothing and changes the temperature of the presentation entirely.</span></li>
+    <li><span><strong>Tap the category, enter the weight, hear the Marathi.</strong> Let the spoken value play out loud. The room hears the accessibility argument rather than reading it on a slide.</span></li>
+    <li><span><strong>Show the value and the ranked recyclers,</strong> and name one of them as a real CPCB-authorised recycler you loaded from public data. Specificity is the credibility.</span></li>
+    <li><span><strong>Generate the handover record.</strong> Hand the phone to a teammate playing the recycler, who scans the QR on the console and counter-signs. The loop closes in front of the judges.</span></li>
+    <li><span><strong>Now turn airplane mode off,</strong> and let the outbox sync while you talk. The records appear on the console. That is the last thing they see, and it is the thing they will remember.</span></li>
+  </ol>
+
+  <div class="note warn" style="margin-top:26px">
+    <h3><svg viewBox="0 0 16 16" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M8 1.8L15 14H1L8 1.8z"/><path d="M8 6.4v3.4M8 11.8v.1"/></svg>Rules for the live demo</h3>
+    <p>One phone, charged, on airplane mode, with the app already installed and the flow already tested on <em>that</em> device. No screen mirroring you have not tested in that room. No live API calls to anything you do not control. If the demo fails, do not debug in front of the panel &mdash; say &ldquo;here it is running from this morning&rdquo;, play the video, and carry on. A team with a backup looks prepared; a team debugging looks finished.</p>
+  </div>
+</section>
+
+<section id="questions">
+  <div class="sechead">
+    <h2>The question bank</h2>
+    <p style="color:var(--ink-2);max-width:68ch">Every answer in one or two sentences. If someone needs a paragraph, they do not know it yet. The first four are the ones that decide the round.</p>
+  </div>
+
+  <div class="qa">
+    <div>
+      <div class="q">Recykal already does this. Why do you exist?</div>
+      <div class="a">Recykal.Market onboards aggregators &mdash; businesses with a smartphone, a ledger and a GST number. We onboard the person below them, who has none of those. Then show the collector saying it in their own words on the field video. That is the moment the room decides, so rehearse this one until it is reflex.</div>
+    </div>
+    <div>
+      <div class="q">Why would a collector actually switch?</div>
+      <div class="a">Because the authorised recycler can pay more for material that arrives with a verifiable handover record, and we share that difference at the point of sale. Then quote the rate you collected in the field. If your interview said the collector is tied to their buyer by credit rather than by price, say <em>that</em> instead &mdash; naming the constraint you discovered is far stronger than pretending you did not.</div>
+    </div>
+    <div>
+      <div class="q">Two-sided marketplace &mdash; who joins first?</div>
+      <div class="a">One material stream, one city, one recycler. We start with PCBs and cables in Nagpur and a single authorised recycler who wants auditable tonnage, and we recruit collectors against that one guaranteed buyer. We are not launching a marketplace, we are closing one route.</div>
+    </div>
+    <div>
+      <div class="q">Where is the AI? This looks like a CRUD app.</div>
+      <div class="a">Classification suggests the category from the photograph, and it is deliberately not on the critical path, because the app has to work with no network. The genuinely hard engineering here is offline sync and the audit record &mdash; and a team that adds a model where a lookup table works has built the wrong product. Say this confidently; it is a better answer than a model demo.</div>
+    </div>
+    <div>
+      <div class="q">How do you know the weight and the photo are not faked?</div>
+      <div class="a">We do not, on the collector side alone &mdash; which is exactly why the record requires a recycler counter-signature and carries timestamp and GPS. It is not a trust system, it is a two-party evidence system, and the recycler has a compliance reason to be honest.</div>
+    </div>
+    <div>
+      <div class="q">Who pays for it?</div>
+      <div class="a">The recycler and, through them, the producer &mdash; both need audit-grade physical tonnage, and both currently pay for certificates rather than evidence. The collector never pays anything, and making them pay would end the product.</div>
+    </div>
+    <div>
+      <div class="q">The name is already taken.</div>
+      <div class="a">Correct &mdash; Kabadiwalla Connect is a Chennai enterprise operating since 2014. We kept the problem-statement title in the submission and named the product separately. Volunteer this before a judge raises it.</div>
+    </div>
+    <div>
+      <div class="q">Why should the ministry adopt this?</div>
+      <div class="a">SIH&rsquo;s own project-implementation guidelines ask the ministry to name a technical agency under its aegis to run implementation. Here that agency already exists, it is JNARDDC, it wrote this statement, and it is in Nagpur &mdash; and here is what they told us when we wrote to them.</div>
+    </div>
+    <div>
+      <div class="q">What about data protection?</div>
+      <div class="a">The statement asks us to avoid unnecessary personal data, so we collect none &mdash; no Aadhaar, no name required, an optional phone number and a local pseudonymous collector ID. The handover record contains material, weight, time and place, not identity.</div>
+    </div>
+    <div>
+      <div class="q">Does this work outside Nagpur?</div>
+      <div class="a">The software is language-configurable and the recycler list is data, so the answer is yes &mdash; but we would rather prove one city than claim twenty. The defensible asset is the collector relationships and the price dataset, and both compound per city rather than transferring for free.</div>
+    </div>
+    <div>
+      <div class="q">What if there is no network for a week?</div>
+      <div class="a">Nothing breaks. Records queue locally with device-generated IDs and sync as a batch when connectivity returns, and because the records are immutable events the replay is idempotent. We tested it with the outbox full.</div>
+    </div>
+    <div>
+      <div class="q">What did you actually build, and what is roadmap?</div>
+      <div class="a">Answer this one with complete precision &mdash; the loop end to end offline with a real recycler list and real field rates is built; the fine-tuned classifier, the voice assistant and payments are roadmap. Teams lose more credibility to a vague claim than to a short honest list.</div>
+    </div>
+  </div>
+</section>
+
+<section id="risks">
+  <div class="sechead">
+    <h2>If it breaks</h2>
+    <p style="color:var(--ink-2);max-width:68ch">Three failures are plausible enough to have a decided answer in advance, so that the decision is made now rather than at two in the morning by whoever is most tired.</p>
+  </div>
+
+  <div class="note warn">
+    <h3><svg viewBox="0 0 16 16" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M8 1.8L15 14H1L8 1.8z"/><path d="M8 6.4v3.4M8 11.8v.1"/></svg>The field visit cannot happen</h3>
+    <p>This is the serious one, because the interview <em>is</em> the advantage &mdash; without it you are pitching the same statement as everyone else with none of the evidence. If it genuinely cannot happen in the window, switch to <strong style="color:var(--ink)">SIH26034, Legal Metrology compliance scanning</strong>: its field research is thirty photographs in a supermarket, doable in twenty minutes at any hour, and its build is the lowest-risk in the top ten. A statement you can evidence beats a better statement you cannot.</p>
+  </div>
+
+  <div class="note warn" style="margin-top:16px">
+    <h3><svg viewBox="0 0 16 16" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M8 1.8L15 14H1L8 1.8z"/><path d="M8 6.4v3.4M8 11.8v.1"/></svg>The collector says they are tied to their buyer by credit</h3>
+    <p>Then the core assumption is wrong in its simple form, and you found that out in a two-hour visit that most teams will not make. Do not bury it. Put it on the feasibility slide as the primary risk, and adjust the pitch: the handover record and the recycler-side value still stand on their own, and the price-transparency claim becomes conditional rather than central. <strong style="color:var(--ink)">A team that discovered and named the flaw looks stronger than a team that never looked.</strong></p>
+  </div>
+
+  <div class="note warn" style="margin-top:16px">
+    <h3><svg viewBox="0 0 16 16" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M8 1.8L15 14H1L8 1.8z"/><path d="M8 6.4v3.4M8 11.8v.1"/></svg>Gate 2 fails and the loop is not working by Day 1 evening</h3>
+    <p>Cut the recycler console to a static mockup, cut the classifier entirely so the icon grid is the only input, and finish the collector path plus the handover record. Those two are the demo. A complete short loop with a generated record beats a longer flow that stalls on stage, and nobody in the room will miss what you removed.</p>
+  </div>
+
+  <div class="note" style="margin-top:26px">
+    <h3><svg viewBox="0 0 16 16" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5"/></svg>The three things that must be true at 19:00 on Day 2</h3>
+    <p><strong style="color:var(--ink)">One loop that works offline on a real phone.</strong> <strong style="color:var(--ink)">One piece of evidence nobody else has</strong> &mdash; a Marathi recording of a Nagpur collector, and their real rates in your app. <strong style="color:var(--ink)">One number</strong> &mdash; current &#8377;/kg against platform &#8377;/kg, with the assumptions written down.</p>
+    <p>Everything in this document exists to protect those three. If an hour on Day 2 is not defending one of them, it is being spent wrong.</p>
+  </div>
+</section>
+
+<footer>
+  <p><strong style="color:var(--ink-2)">Companion document.</strong> The ranking that produced this pick, the full dossier on SIH26229, and the nine statements it beat are in the decision dossier. Scores, competitor findings and source citations live there; this page assumes them and does not repeat them.</p>
+  <p>Claims are marked <span class="tag t-fact">Fact</span> where sourced and <span class="tag t-inf">Inference</span> where reasoned. Times are targets, not measurements. Where this plan asserts something you must verify yourself &mdash; the statement being live, the current presentation template &mdash; it says so at the point of use.</p>
+</footer>
+
+</div>
+
+<script>
+(function(){
+  var links = Array.prototype.slice.call(document.querySelectorAll('.rail a'));
+  var targets = links.map(function(a){ return document.querySelector(a.getAttribute('href')); }).filter(Boolean);
+  if(targets.length && 'IntersectionObserver' in window){
+    var so = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if(e.isIntersecting){
+          links.forEach(function(a){ a.removeAttribute('aria-current'); });
+          var i = targets.indexOf(e.target);
+          if(i > -1) links[i].setAttribute('aria-current','true');
+        }
+      });
+    }, {rootMargin:'-15% 0px -70% 0px'});
+    targets.forEach(function(t){ so.observe(t); });
+  }
+})();
+</script>
