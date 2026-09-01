@@ -1,0 +1,195 @@
+// The device client targets the react-native engine (runs on the phone over
+// react-native-quick-sqlite).
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "react-native"
+  output     = "../src/db/generated"
+}
+
+// A second, node-engine client generated from the SAME models, used only by
+// Jest. A react-native-engine client cannot run under Node, so the repo tests
+// import this one and point it at a temp SQLite file. The model API is
+// identical, so one repo body serves both.
+generator testClient {
+  provider = "prisma-client-js"
+  output   = "../src/db/generated-node"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// A cached copy of what /sync/bootstrap returned. Replaceable — if lost, the
+// app re-fetches it. Everything from Collector down is AUTHORED on the device
+// and exists nowhere else until the outbox drains, which is why it carries
+// device-generated uuids.
+model Meta {
+  key   String  @id
+  value String?
+
+  @@map("meta")
+}
+
+model Category {
+  id               String  @id
+  code             String  @unique
+  parentCode       String? @map("parent_code")
+  nameEn           String  @map("name_en")
+  nameMr           String  @map("name_mr")
+  nameHi           String  @map("name_hi")
+  iconKey          String  @map("icon_key")
+  defaultUnit      String  @map("default_unit")
+  criticalMinerals String  @default("[]") @map("critical_minerals")
+
+  @@map("category")
+}
+
+model Recycler {
+  id                  String  @id
+  name                String
+  address             String?
+  lat                 Float?
+  lng                 Float?
+  district            String?
+  phone               String?
+  authorizationStatus String  @map("authorization_status")
+  validityTo          String? @map("validity_to")
+  serviceAreaKm       Int     @default(25) @map("service_area_km")
+  pickupAvailable     Boolean @default(false) @map("pickup_available")
+  materialsAccepted   String  @default("[]") @map("materials_accepted")
+
+  @@map("recycler")
+}
+
+model Rate {
+  recyclerId   String @map("recycler_id")
+  categoryCode String @map("category_code")
+  unit         String
+  price        Float
+  validFrom    String @map("valid_from")
+
+  @@id([recyclerId, categoryCode])
+  @@map("rate")
+}
+
+model ConditionFactor {
+  condition String @id
+  factor    Float
+
+  @@map("condition_factor")
+}
+
+model Collector {
+  id                String  @id
+  preferredLanguage String  @map("preferred_language")
+  operatingArea     String? @map("operating_area")
+  createdAt         String  @map("created_at")
+
+  lots Lot[]
+
+  @@map("collector")
+}
+
+// Money and quantity are Float: SQLite has no decimal type. Every value is
+// rounded through round2 from @bhaav/core before it is written, and the server
+// re-derives every total anyway. Timestamps are ISO-8601 strings because a lot
+// may be created days before it syncs (DB.md 3.5).
+model Lot {
+  id             String  @id
+  collectorId    String  @map("collector_id")
+  categoryId     String  @map("category_id")
+  categoryCode   String  @map("category_code")
+  unit           String
+  quantity       Float
+  condition      String
+  sourceType     String? @map("source_type")
+  estimatedValue Float   @map("estimated_value")
+  collectionLat  Float?  @map("collection_lat")
+  collectionLng  Float?  @map("collection_lng")
+  collectionTs   String  @map("collection_ts")
+  status         String
+  deviceId       String  @map("device_id")
+  createdAt      String  @map("created_at")
+
+  collector   Collector    @relation(fields: [collectorId], references: [id])
+  acceptances Acceptance[]
+  handover    Handover?
+  photos      Photo[]
+
+  @@index([createdAt], map: "lot_by_created")
+  @@map("lot")
+}
+
+model Acceptance {
+  id               String  @id
+  lotId            String  @map("lot_id")
+  recyclerId       String  @map("recycler_id")
+  acceptedRate     Float   @map("accepted_rate")
+  acceptedUnit     String  @map("accepted_unit")
+  acceptedTs       String  @map("accepted_ts")
+  recyclerResponse String  @default("NONE") @map("recycler_response")
+  responseTs       String? @map("response_ts")
+  createdAt        String  @map("created_at")
+
+  lot Lot @relation(fields: [lotId], references: [id])
+
+  @@index([lotId], map: "acceptance_by_lot")
+  @@map("acceptance")
+}
+
+model Handover {
+  id                   String  @id
+  lotId                String  @unique @map("lot_id")
+  recyclerId           String  @map("recycler_id")
+  referenceCode        String  @map("reference_code")
+  inspectedQuantity    Float   @map("inspected_quantity")
+  finalUnitPrice       Float   @map("final_unit_price")
+  finalTotal           Float   @map("final_total")
+  inspectedCondition   String? @map("inspected_condition")
+  downgradeReasonCode  String? @map("downgrade_reason_code")
+  collectorProtest     Boolean @default(false) @map("collector_protest")
+  handoverLat          Float?  @map("handover_lat")
+  handoverLng          Float?  @map("handover_lng")
+  handoverTs           String  @map("handover_ts")
+  status               String
+  recyclerConfirmedAt  String? @map("recycler_confirmed_at")
+  collectorConfirmedAt String? @map("collector_confirmed_at")
+  createdAt            String  @map("created_at")
+
+  lot Lot @relation(fields: [lotId], references: [id])
+
+  @@map("handover")
+}
+
+model Photo {
+  id         String  @id
+  lotId      String  @map("lot_id")
+  kind       String
+  localUri   String  @map("local_uri")
+  sha256     String
+  bytes      Int
+  uploadedAt String? @map("uploaded_at")
+  createdAt  String  @map("created_at")
+
+  lot Lot @relation(fields: [lotId], references: [id])
+
+  @@index([lotId], map: "photo_by_lot")
+  @@map("photo")
+}
+
+// Device only — never on the server. Append-only and idempotent by
+// construction: the server upserts by uuid, so replaying a batch is harmless.
+model Outbox {
+  id         String  @id
+  entityType String  @map("entity_type")
+  entityId   String  @map("entity_id")
+  payload    String
+  createdAt  String  @map("created_at")
+  attempts   Int     @default(0)
+  lastError  String? @map("last_error")
+  syncedAt   String? @map("synced_at")
+
+  @@index([syncedAt, createdAt], map: "outbox_pending")
+  @@map("outbox")
+}
