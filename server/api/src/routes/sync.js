@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { prisma } from "../db.js";
+import { validateRecord } from "@bhaav/core/validate";
 
 export const syncRouter = Router();
 
@@ -169,6 +170,196 @@ syncRouter.get("/delta", async (req, res, next) => {
       removedRecyclerIds: lapsedRecyclers.map((r) => r.id),
       conditionFactors: snapshot.conditionFactors,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /sync/push
+// No auth. Receives a batch of device-queued records (lots, acceptances,
+// handovers, photos) uploaded when the device goes online.
+//
+// Design decisions:
+// - Each record is processed individually, not in one transaction. A single
+//   bad record inside one transaction would roll back everything and the device
+//   would retry the whole batch forever. Per-record writes let good records
+//   land and bad ones come back with a reason (SERVER.md §4).
+// - Every writer uses upsert with update:{} — ON CONFLICT DO NOTHING semantics.
+//   A record the device already sent is a fact; replaying the outbox must never
+//   rewrite history. This is what makes retry safe.
+// - Records are sorted parents-before-children so an acceptance can reference
+//   a lot that arrives in the same batch.
+// ---------------------------------------------------------------------------
+
+const PUSH_ORDER = ["collector", "lot", "acceptance", "handover", "photo"];
+
+// Convert a value to a Prisma-compatible Decimal string. Null passthrough.
+const dec = (v) => (v === null || v === undefined ? null : String(v));
+
+const writers = {
+  async collector(tx, p) {
+    await tx.collector.upsert({
+      where: { id: p.id },
+      update: {},
+      create: {
+        id: p.id,
+        preferredLanguage: p.preferred_language,
+        operatingArea: p.operating_area ?? null,
+      },
+    });
+  },
+
+  async lot(tx, p) {
+    await tx.lot.upsert({
+      where: { id: p.id },
+      update: {},
+      create: {
+        id: p.id,
+        collectorId: p.collector_id,
+        categoryId: p.category_id,
+        unit: p.unit,
+        quantity: dec(p.quantity),
+        condition: p.condition,
+        sourceType: p.source_type ?? null,
+        estimatedValue: dec(p.estimated_value),
+        collectionLat: p.collection_lat ?? null,
+        collectionLng: p.collection_lng ?? null,
+        collectionTs: new Date(p.collection_ts),
+        status: p.status,
+        deviceId: p.device_id,
+      },
+    });
+  },
+
+  async acceptance(tx, p) {
+    await tx.acceptance.upsert({
+      where: { id: p.id },
+      update: {},
+      create: {
+        id: p.id,
+        lotId: p.lot_id,
+        recyclerId: p.recycler_id,
+        acceptedRate: dec(p.accepted_rate),
+        acceptedUnit: p.accepted_unit,
+        acceptedTs: new Date(p.accepted_ts),
+        recyclerResponse: p.recycler_response ?? "NONE",
+        responseTs: p.response_ts ? new Date(p.response_ts) : null,
+      },
+    });
+  },
+
+  async handover(tx, p) {
+    await tx.handover.upsert({
+      where: { id: p.id },
+      update: {},
+      create: {
+        id: p.id,
+        lotId: p.lot_id,
+        recyclerId: p.recycler_id,
+        referenceCode: p.reference_code,
+        inspectedQuantity: dec(p.inspected_quantity),
+        finalUnitPrice: dec(p.final_unit_price),
+        finalTotal: dec(p.final_total),
+        inspectedCondition: p.inspected_condition ?? null,
+        downgradeReasonCode: p.downgrade_reason_code ?? null,
+        collectorProtest: Boolean(p.collector_protest),
+        handoverLat: p.handover_lat ?? null,
+        handoverLng: p.handover_lng ?? null,
+        handoverTs: new Date(p.handover_ts),
+        status: p.status,
+        recyclerConfirmedAt: p.recycler_confirmed_at ? new Date(p.recycler_confirmed_at) : null,
+        collectorConfirmedAt: p.collector_confirmed_at ? new Date(p.collector_confirmed_at) : null,
+      },
+    });
+  },
+
+  async photo(tx, p) {
+    await tx.photo.upsert({
+      where: { id: p.id },
+      update: {},
+      create: {
+        id: p.id,
+        lotId: p.lot_id,
+        kind: p.kind,
+        sha256: p.sha256,
+        bytes: p.bytes,
+        uploadedAt: null,
+      },
+    });
+  },
+};
+
+syncRouter.post("/push", async (req, res, next) => {
+  try {
+    const { records } = req.body ?? {};
+    if (!Array.isArray(records)) {
+      return res.status(400).json({ error: "bad_request", detail: "records must be an array" });
+    }
+
+    // Parents before children, so an acceptance can reference a lot that
+    // arrived in the same batch (SERVER.md §4).
+    const sorted = [...records].sort(
+      (a, b) => PUSH_ORDER.indexOf(a.type) - PUSH_ORDER.indexOf(b.type),
+    );
+
+    // Pre-load the set of lot ids in this batch so we can satisfy FK checks
+    // for acceptances/handovers/photos without a database lookup per record.
+    const batchLotIds = new Set(
+      records.filter((r) => r.type === "lot").map((r) => r.payload?.id),
+    );
+    // Also cache lot ids we discover exist in the database during this batch.
+    const knownLotIds = new Set(
+      (
+        await prisma.lot.findMany({
+          where: { id: { in: [...batchLotIds] } },
+          select: { id: true },
+        })
+      ).map((l) => l.id),
+    );
+
+    const applied = [];
+    const rejected = [];
+
+    for (const record of sorted) {
+      const { type, payload } = record;
+      const id = record.id ?? payload?.id;
+
+      // Validate first — same code runs on device, so device and server agree.
+      const errors = validateRecord(type, payload);
+      if (errors.length > 0) {
+        rejected.push({ id, reason: errors.join("; ") });
+        continue;
+      }
+
+      // Reject child records whose lot is not in this batch and not in the DB.
+      if (
+        (type === "acceptance" || type === "handover" || type === "photo") &&
+        !batchLotIds.has(payload.lot_id) &&
+        !knownLotIds.has(payload.lot_id)
+      ) {
+        const exists = await prisma.lot.findUnique({
+          where: { id: payload.lot_id },
+          select: { id: true },
+        });
+        if (!exists) {
+          rejected.push({ id, reason: `unknown lot ${payload.lot_id}` });
+          continue;
+        }
+        knownLotIds.add(payload.lot_id);
+      }
+
+      try {
+        await writers[type](prisma, payload);
+        applied.push(id);
+        // Once a lot lands, child records in the same batch can reference it.
+        if (type === "lot") knownLotIds.add(payload.id);
+      } catch (err) {
+        rejected.push({ id, reason: err.message.split("\n").slice(-1)[0].trim() });
+      }
+    }
+
+    res.json({ applied, rejected });
   } catch (err) {
     next(err);
   }
