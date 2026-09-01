@@ -29,8 +29,21 @@ async function request(path, { method = "GET", body, form } = {}) {
   return payload;
 }
 
+async function requestBlob(path) {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "GET",
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, payload);
+  }
+  return res.blob();
+}
+
 export const api = {
   get: (path) => request(path),
+  getBlob: (path) => requestBlob(path),
   post: (path, body) => request(path, { method: "POST", body }),
   postForm: (path, form) => request(path, { method: "POST", form }),
 };
