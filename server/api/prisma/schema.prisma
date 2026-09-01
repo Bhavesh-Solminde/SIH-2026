@@ -41,6 +41,7 @@ model Recycler {
   pickupAvailable     Boolean   @default(false) @map("pickup_available")
   materialsAccepted   String[]  @default([]) @map("materials_accepted")
   createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
 
   rates       Rate[]
   acceptances Acceptance[]

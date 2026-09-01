@@ -1,6 +1,7 @@
 import express from "express";
 import cookieParser from "cookie-parser";
 import { prisma } from "./db.js";
+import { syncRouter } from "./routes/sync.js";
 
 export function createApp() {
   const app = express();
@@ -18,8 +19,8 @@ export function createApp() {
     res.json({ status: db === "ok" ? "ok" : "degraded", db, aiml: process.env.AIML_URL ?? null });
   });
 
-  // Routers are mounted here as each task lands:
-  //   task  9-11  ./routes/sync.js       -> /sync
+  // Routers mounted as each task lands:
+  app.use("/sync", syncRouter);   // tasks 9-11
   //   task 12     ./routes/auth.js       -> /auth
   //   task 13-14  ./routes/recycler.js   -> /recycler
   //   task 15-16  ./routes/lots.js       -> /lots, /handover
