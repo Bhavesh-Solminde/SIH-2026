@@ -1,0 +1,248 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgcrypto]
+}
+
+// DB.md 3.1 — four columns, and that is the point. No name, no Aadhaar,
+// no phone, no photograph of a person.
+model Collector {
+  id                String   @id @db.Uuid
+  preferredLanguage String   @map("preferred_language")
+  operatingArea     String?  @map("operating_area")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  lots Lot[]
+
+  @@map("collector")
+}
+
+// DB.md 3.2 — seeded from mpcb_recyclers.csv. The API only ever returns VALID.
+model Recycler {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                String
+  address             String
+  lat                 Float?
+  lng                 Float?
+  type                String
+  capacityMta         Int?      @map("capacity_mta")
+  registrationNo      String    @unique @map("registration_no")
+  validityTo          DateTime? @map("validity_to") @db.Date
+  authorizationStatus String    @map("authorization_status")
+  district            String?
+  phone               String?
+  email               String?
+  serviceAreaKm       Int       @default(25) @map("service_area_km")
+  pickupAvailable     Boolean   @default(false) @map("pickup_available")
+  materialsAccepted   String[]  @default([]) @map("materials_accepted")
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  rates       Rate[]
+  acceptances Acceptance[]
+  handovers   Handover[]
+  accounts    RecyclerAccount[]
+
+  @@index([authorizationStatus])
+  @@map("recycler")
+}
+
+// DB.md 3.3 — parent_id gives sub-categories without a second table.
+model Category {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code             String   @unique
+  parentId         String?  @map("parent_id") @db.Uuid
+  nameEn           String   @map("name_en")
+  nameMr           String   @map("name_mr")
+  nameHi           String   @map("name_hi")
+  iconKey          String   @map("icon_key")
+  defaultUnit      String   @map("default_unit")
+  criticalMinerals String[] @default([]) @map("critical_minerals")
+  expectedQtyMin   Decimal? @map("expected_qty_min") @db.Decimal(10, 3)
+  expectedQtyMax   Decimal? @map("expected_qty_max") @db.Decimal(10, 3)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryTree")
+  rates    Rate[]
+  lots     Lot[]
+
+  @@map("category")
+}
+
+// DB.md 3.4 — APPEND ONLY. There is no UPDATE on this table, ever.
+model Rate {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recyclerId String   @map("recycler_id") @db.Uuid
+  categoryId String   @map("category_id") @db.Uuid
+  unit       String
+  price      Decimal  @db.Decimal(12, 2)
+  source     String
+  location   String?
+  validFrom  DateTime @default(now()) @map("valid_from") @db.Timestamptz(6)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  recycler Recycler @relation(fields: [recyclerId], references: [id])
+  category Category @relation(fields: [categoryId], references: [id])
+
+  @@index([recyclerId, categoryId, validFrom(sort: Desc)], map: "rate_lookup")
+  @@map("rate")
+}
+
+// DB.md 3.5 — device-generated id. category_id points at the LEAF category.
+model Lot {
+  id             String   @id @db.Uuid
+  collectorId    String   @map("collector_id") @db.Uuid
+  categoryId     String   @map("category_id") @db.Uuid
+  unit           String
+  quantity       Decimal  @db.Decimal(10, 3)
+  condition      String
+  sourceType     String?  @map("source_type")
+  estimatedValue Decimal  @map("estimated_value") @db.Decimal(12, 2)
+  collectionLat  Float?   @map("collection_lat")
+  collectionLng  Float?   @map("collection_lng")
+  collectionTs   DateTime @map("collection_ts") @db.Timestamptz(6)
+  status         String
+  deviceId       String   @map("device_id")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  collector   Collector    @relation(fields: [collectorId], references: [id])
+  category    Category     @relation(fields: [categoryId], references: [id])
+  acceptances Acceptance[]
+  handover    Handover?
+  photos      Photo[]
+
+  @@index([collectorId, createdAt(sort: Desc)], map: "lot_by_collector")
+  @@map("lot")
+}
+
+model ConditionFactor {
+  condition String  @id
+  factor    Decimal @db.Decimal(4, 3)
+
+  @@map("condition_factor")
+}
+
+// DB.md 3.6 — its own table so a decline is never overwritten by the next
+// acceptance. accepted_rate is FROZEN here permanently.
+model Acceptance {
+  id               String    @id @db.Uuid
+  lotId            String    @map("lot_id") @db.Uuid
+  recyclerId       String    @map("recycler_id") @db.Uuid
+  acceptedRate     Decimal   @map("accepted_rate") @db.Decimal(12, 2)
+  acceptedUnit     String    @map("accepted_unit")
+  acceptedTs       DateTime  @map("accepted_ts") @db.Timestamptz(6)
+  recyclerResponse String    @default("NONE") @map("recycler_response")
+  responseTs       DateTime? @map("response_ts") @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  lot      Lot      @relation(fields: [lotId], references: [id])
+  recycler Recycler @relation(fields: [recyclerId], references: [id])
+
+  @@index([lotId], map: "acceptance_by_lot")
+  @@index([recyclerId, acceptedTs(sort: Desc)], map: "acceptance_by_recy")
+  @@map("acceptance")
+}
+
+// DB.md 3.7. The two-sided-signature CHECK is added by the raw migration in
+// task 6 — Prisma's schema language cannot express a multi-column CHECK.
+//
+// inspected_condition, downgrade_reason_code and collector_protest are the
+// README open item 9 / AI-ANOMALY-SPEC 0.2 addition. Without them D9-D12
+// have nothing to compute over. See the index plan, amendment 1.
+model Handover {
+  id                   String    @id @db.Uuid
+  lotId                String    @unique @map("lot_id") @db.Uuid
+  recyclerId           String    @map("recycler_id") @db.Uuid
+  referenceCode        String    @unique @map("reference_code")
+  inspectedQuantity    Decimal   @map("inspected_quantity") @db.Decimal(10, 3)
+  finalUnitPrice       Decimal   @map("final_unit_price") @db.Decimal(12, 2)
+  finalTotal           Decimal   @map("final_total") @db.Decimal(12, 2)
+  inspectedCondition   String?   @map("inspected_condition")
+  downgradeReasonCode  String?   @map("downgrade_reason_code")
+  collectorProtest     Boolean   @default(false) @map("collector_protest")
+  handoverLat          Float?    @map("handover_lat")
+  handoverLng          Float?    @map("handover_lng")
+  handoverTs           DateTime  @map("handover_ts") @db.Timestamptz(6)
+  status               String    @default("PENDING_COLLECTOR")
+  recyclerConfirmedAt  DateTime? @map("recycler_confirmed_at") @db.Timestamptz(6)
+  collectorConfirmedAt DateTime? @map("collector_confirmed_at") @db.Timestamptz(6)
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  lot      Lot      @relation(fields: [lotId], references: [id])
+  recycler Recycler @relation(fields: [recyclerId], references: [id])
+
+  @@index([recyclerId, handoverTs(sort: Desc)], map: "handover_by_recy")
+  @@map("handover")
+}
+
+// DB.md 3.8 — uploaded_at NULL is normal, not an error.
+model Photo {
+  id         String    @id @db.Uuid
+  lotId      String    @map("lot_id") @db.Uuid
+  kind       String
+  sha256     String
+  bytes      Int
+  uploadedAt DateTime? @map("uploaded_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  lot Lot @relation(fields: [lotId], references: [id])
+
+  @@index([lotId], map: "photo_by_lot")
+  @@map("photo")
+}
+
+// DB.md 3.9. subject_id is deliberately NOT a foreign key — it points at
+// five different subject kinds, MARKET included (D13).
+//
+// config_version and admin_outcome are the AI-ANOMALY-SPEC gap 9 / 3.4
+// addition: without config_version no past decision can ever be explained.
+// See the index plan, amendments 2 and 3.
+model AnomalyFlag {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  subjectType   String    @map("subject_type")
+  subjectId     String    @map("subject_id")
+  detectorCode  String    @map("detector_code")
+  severity      String
+  detail        Json
+  configVersion String?   @map("config_version")
+  adminOutcome  String?   @map("admin_outcome")
+  runId         String?   @map("run_id")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  resolvedAt    DateTime? @map("resolved_at") @db.Timestamptz(6)
+
+  @@index([subjectType, subjectId], map: "flag_by_subject")
+  @@map("anomaly_flag")
+}
+
+// SERVER.md 5 — recycler console auth. DB.md 6 lists no account or session
+// table; it also states that such additions are safe in week two because they
+// touch no existing column. See the index plan, amendment 4.
+model RecyclerAccount {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recyclerId   String   @map("recycler_id") @db.Uuid
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  recycler Recycler          @relation(fields: [recyclerId], references: [id])
+  sessions RecyclerSession[]
+
+  @@map("recycler_account")
+}
+
+model RecyclerSession {
+  token     String   @id
+  accountId String   @map("account_id") @db.Uuid
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  account RecyclerAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@map("recycler_session")
+}

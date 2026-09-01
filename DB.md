@@ -211,6 +211,9 @@ CREATE TABLE handover (
   inspected_quantity     numeric(10,3) NOT NULL CHECK (inspected_quantity > 0),
   final_unit_price       numeric(12,2) NOT NULL CHECK (final_unit_price >= 0),
   final_total            numeric(12,2) NOT NULL CHECK (final_total >= 0),
+  inspected_condition    text CHECK (inspected_condition IN ('GOOD','FAIR','POOR')),
+  downgrade_reason_code  text,      -- NULL unless inspected_condition is lower than lot.condition
+  collector_protest      boolean NOT NULL DEFAULT false,
   handover_lat           double precision,
   handover_lng           double precision,
   handover_ts            timestamptz NOT NULL,
@@ -239,6 +242,17 @@ CREATE TABLE handover (
 
 **Never `UPDATE` a confirmed handover.** A correction is a new row referencing the original — this is an event log, not mutable state, which is why sync conflicts cannot occur.
 
+**Added 1 September 2026, closing `README.md` open item 9 and `AI-ANOMALY-SPEC` §0.2.**
+`inspected_condition` is what the recycler graded the material *at handover*, as
+against `lot.condition`, which is the collector's declaration at creation.
+Without the pair there is no way to record a downgrade, and detectors D9–D12
+have nothing to compute over. `downgrade_reason_code` is drawn from the fixed
+list in `AI-ANOMALY-SPEC` §3.2 — never free text, because a fixed list can be
+counted and prose cannot. `collector_protest` is recorded separately from
+`collector_confirmed_at` because a collector standing at the counter with the
+material already delivered will sign almost anything: **a signature is not
+agreement.**
+
 ### 3.8 `photo`
 
 ```sql
@@ -262,19 +276,30 @@ CREATE TABLE photo (
 ```sql
 CREATE TABLE anomaly_flag (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  subject_type  text NOT NULL CHECK (subject_type IN ('LOT','HANDOVER','RECYCLER','COLLECTOR')),
+  subject_type  text NOT NULL CHECK (subject_type IN ('LOT','HANDOVER','RECYCLER','COLLECTOR','MARKET')),
   subject_id    uuid NOT NULL,
-  detector_code text NOT NULL,                       -- D1..D8, see AI.md
+  detector_code text NOT NULL,                       -- D1..D13, see AI.md
   severity      text NOT NULL CHECK (severity IN ('INFO','WARN','CRITICAL')),
   detail        jsonb NOT NULL,                      -- the numbers that triggered it
+  config_version text,                              -- which threshold set produced this flag
+  admin_outcome  text CHECK (admin_outcome IN ('JUSTIFIED','SUSPICIOUS','DISPUTED','UNRESOLVED','INVALID')),
+  run_id         uuid,                              -- the /detect run this came from
   created_at    timestamptz NOT NULL DEFAULT now(),
   resolved_at   timestamptz
 );
 ```
 
-`subject_id` is deliberately **not** a foreign key — it points at four different tables. This is the one place where a little looseness is worth it; the alternative is four near-identical tables.
+`subject_id` is deliberately **not** a foreign key — it points at five different subject kinds. This is the one place where a little looseness is worth it; the alternative is five near-identical tables.
 
 `detail` must always contain the triggering numbers, so every flag is explainable in one sentence on the console.
+
+**Added 1 September 2026.** `'MARKET'` is required by detector D13, which flags a
+single-buyer district rather than a person (`AI-ANOMALY-SPEC` §6.3) —
+flagging the market is honest where the recycler's bias is mathematically
+unidentifiable. `config_version` closes `AI-ANOMALY-SPEC` gap 9: thresholds are
+configuration and will change, and without recording which set produced a flag
+no past decision can ever be explained. `admin_outcome` carries the review
+result back into the tuning set (`AI-ANOMALY-SPEC` §3.4).
 
 ### 3.10 `outbox` — **device only, never on the server**
 
