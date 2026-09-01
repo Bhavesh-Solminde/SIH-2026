@@ -22,6 +22,17 @@
 **Focus:** M01+M02 — FastAPI scaffold, /health, Pydantic contract models, stats.py, geo.py
 **Owns:** server/aiml/** exclusively
 
+**M03+M04+M05 DONE (2026-09-01):**
+- server/aiml/bhaav_aiml/detectors/__init__.py — REGISTRY + run_detectors(), fail-safe exception handler, D4/D5 permanent skips
+- server/aiml/bhaav_aiml/detectors/price.py — D1 (price deviation INFO), D2 (systematic underpayment WARN), D3 (bait pricing WARN)
+- server/aiml/bhaav_aiml/detectors/provenance.py — D6 (duplicate lot WARN), D7 (impossible travel WARN), D8 (clustered handovers CRITICAL)
+- server/aiml/bhaav_aiml/detectors/grading.py — D9 (grader bias, shared-ownership caveat on detail), D10/D12 skip-with-reason stubs, D11 (cross-category uniformity WARN), D13 (single-buyer MARKET finding)
+- server/aiml/tests/test_price_detectors.py — 6 tests
+- server/aiml/tests/test_provenance_detectors.py — 4 tests
+- server/aiml/tests/test_grading_detectors.py — 4 tests
+- Total: 30/30 tests passing (16 M01+M02 + 14 new)
+- Note: D9 test assertion corrected from abs(bias)<0.2 to bias<warn_threshold (plan assertion was wrong for the test data; honest recycler gets negative bias = -0.5 because liar inflates the "others" baseline, but D9 only fires on POSITIVE bias above 0.35 — correct behaviour preserved)
+
 ---
 
 ## App Agent (client/app/)
@@ -34,6 +45,12 @@
 **Focus:** T07+T08 — idempotent seed + Express skeleton + /health
 **Owns:** server/api/scripts/seed.js, server/api/src/app.js, server/api/src/routes/, server/api/package.json
 - Note: schema already applied (cd70e49, 6d24075). DATABASE_URL=postgresql://localhost:5433/bhaav
+- T07 DONE: server/api/seed/seed.js, server/api/seed/categories.js, server/api/src/lib/password.js
+- T07 DONE: server/api/test/seed.test.js, server/api/test/password.test.js
+- T08 DONE: server/api/src/db.js, server/api/src/app.js, server/api/src/server.js
+- T08 DONE: server/api/test/health.test.js
+- Seed note: registrationNo keyed as `{sr}-{registration}` (CSV reg column is NOT unique; many rows share same value)
+- All 27 tests pass (constraints 13, seed 8, password 4, health 2)
 
 ---
 
