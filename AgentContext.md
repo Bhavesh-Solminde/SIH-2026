@@ -78,4 +78,13 @@
 - client/console/test/login.test.jsx — 2 tests PASSING
 - Total: 10/10 tests passing
 
+**C03+C04 DONE (2026-09-01):**
+- client/console/src/components/RateTable.jsx — editable rate table, append-only publish (never overwrite), staleness indicator (>7d ⚠), copy-current action
+- client/console/src/app/(protected)/rates/page.jsx — R1 rates page, loads GET /recycler/rates, POST /recycler/rates on publish, reloads after publish
+- client/console/test/RateTable.test.jsx — 4 tests (stale indicator, publish with edits, filter null-price rows, copy-current)
+- client/console/src/components/AcceptanceList.jsx — acceptance list with inaction note, pseudonymous collector ID, Acknowledge/Decline buttons
+- client/console/src/app/(protected)/acceptances/page.jsx — R2 acceptances page, loads GET /recycler/acceptances, polls every 10s, POST /recycler/acceptances/:id/respond on action
+- client/console/test/AcceptanceList.test.jsx — 4 tests (inaction note, pseudonymous ID, acknowledge, decline)
+- Total: 18/18 tests passing
+
 ---
