@@ -5,6 +5,7 @@ import { syncRouter } from "./routes/sync.js";
 import { authRouter } from "./routes/auth.js";
 import { recyclerRouter } from "./routes/recycler.js";
 import { lotsRouter } from "./routes/lots.js";
+import { handoverRouter } from "./routes/handover.js";
 
 export function createApp() {
   const app = express();
@@ -27,8 +28,7 @@ export function createApp() {
   app.use("/auth", authRouter);       // task 12
   app.use("/recycler", recyclerRouter); // tasks 13-14
   app.use("/lots", lotsRouter);       // task 15
-  //   task 16     ./routes/handover.js   -> /handover
-  //   task 17     ./routes/handover.js   -> /handover/:lot_id/confirm
+  app.use("/handover", handoverRouter); // tasks 16-17
   //   task 18     ./routes/photos.js     -> /photos
   //   task 20     ./routes/detect.js     -> /detect-run
 
