@@ -2,6 +2,9 @@ import express from "express";
 import cookieParser from "cookie-parser";
 import { prisma } from "./db.js";
 import { syncRouter } from "./routes/sync.js";
+import { authRouter } from "./routes/auth.js";
+import { recyclerRouter } from "./routes/recycler.js";
+import { lotsRouter } from "./routes/lots.js";
 
 export function createApp() {
   const app = express();
@@ -20,10 +23,11 @@ export function createApp() {
   });
 
   // Routers mounted as each task lands:
-  app.use("/sync", syncRouter);   // tasks 9-11
-  //   task 12     ./routes/auth.js       -> /auth
-  //   task 13-14  ./routes/recycler.js   -> /recycler
-  //   task 15-16  ./routes/lots.js       -> /lots, /handover
+  app.use("/sync", syncRouter);       // tasks 9-11
+  app.use("/auth", authRouter);       // task 12
+  app.use("/recycler", recyclerRouter); // tasks 13-14
+  app.use("/lots", lotsRouter);       // task 15
+  //   task 16     ./routes/handover.js   -> /handover
   //   task 17     ./routes/handover.js   -> /handover/:lot_id/confirm
   //   task 18     ./routes/photos.js     -> /photos
   //   task 20     ./routes/detect.js     -> /detect-run
