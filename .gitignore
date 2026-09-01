@@ -12,3 +12,7 @@ client/app/.expo/
 client/app/android/
 test-results/
 playwright-report/
+client/app/src/db/generated/
+client/app/src/db/generated-node/
+client/app/prisma/.env
+client/app/prisma/bhaav.db
