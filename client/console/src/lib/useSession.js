@@ -9,7 +9,8 @@ export function useSession() {
   useEffect(() => {
     api
       .get("/auth/me")
-      .then((r) => setRecycler(r.recycler))
+      // /auth/me returns { id, name, email } directly (req.recycler shape)
+      .then((r) => setRecycler(r))
       .catch(() => router.push("/login"));
   }, [router]);
   return recycler;

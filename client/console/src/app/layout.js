@@ -1,3 +1,5 @@
+import "./globals.css";
+
 export const metadata = { title: "Bhaav Console" };
 
 export default function RootLayout({ children }) {

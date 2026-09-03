@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "../../lib/api.js";
 import { t } from "../../lib/labels.js";
+import { clog } from "../../lib/logger.js";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -15,12 +16,13 @@ export default function LoginPage() {
     e.preventDefault();
     setError(null);
     setBusy(true);
+    clog.auth.info("login attempt", { email });
     try {
-      await api.post("/auth/login", { email, password });
+      const result = await api.post("/auth/login", { email, password });
+      clog.auth.info("login success", { name: result.name });
       router.push("/rates");
-    } catch {
-      // The API returns the same body for a wrong email and a wrong password,
-      // so this message must not distinguish them either.
+    } catch (err) {
+      clog.auth.warn("login failed", { email, error: err.message });
       setError("Sign in failed. Check the email and password.");
     } finally {
       setBusy(false);
@@ -28,7 +30,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main style={{ maxWidth: 360, margin: "10vh auto", padding: 24 }}>
+    <main className="login-wrap">
       <h1>Bhaav — {t("login")}</h1>
       <form onSubmit={submit}>
         <label htmlFor="email">Email</label>
@@ -41,8 +43,8 @@ export default function LoginPage() {
           onChange={(e) => setPassword(e.target.value)}
           required
         />
-        {error && <p role="alert">{error}</p>}
-        <button type="submit" disabled={busy}>
+        {error && <p role="alert" style={{ marginTop: ".75rem" }}>{error}</p>}
+        <button type="submit" disabled={busy} style={{ marginTop: "1rem", width: "100%" }}>
           {t("login")}
         </button>
       </form>

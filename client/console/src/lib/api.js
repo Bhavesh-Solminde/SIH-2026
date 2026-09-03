@@ -1,4 +1,7 @@
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+// All requests go through the Next.js rewrite: /api/* → Express :4000/*
+// This makes them same-origin from the browser's perspective — no CORS needed.
+const BASE = "/api";
+
 
 export class ApiError extends Error {
   constructor(status, body) {
