@@ -1,9 +1,11 @@
 import { uuidv7 } from "@bhaav/core/ids";
 import { enqueue } from "./outbox.js";
+import { log } from "../../lib/logger";
 
 const WEEK_MS = 7 * 86_400_000;
 
 export async function createLot(db, draft) {
+  log.db.info('createLot', { categoryCode: draft.categoryCode, quantity: draft.quantity, condition: draft.condition });
   const id = uuidv7();
   const createdAt = new Date().toISOString();
 

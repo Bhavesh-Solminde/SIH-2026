@@ -3,6 +3,8 @@
     "name": "Bhaav",
     "slug": "bhaav",
     "version": "1.0.0",
+    "sdkVersion": "52.0.0",
+    "newArchEnabled": true,
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "platforms": ["android"],
@@ -20,21 +22,6 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       }
-    },
-    "plugins": [
-      "expo-dev-client",
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "Bhaav needs the camera to photograph the material."
-        }
-      ],
-      [
-        "expo-location",
-        {
-          "locationAlwaysAndWhenInUsePermission": "Bhaav records where a lot was collected."
-        }
-      ]
-    ]
+    }
   }
 }

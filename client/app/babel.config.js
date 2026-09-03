@@ -2,6 +2,16 @@ module.exports = function (api) {
   // Cache the configuration - improves build performance
   api.cache(true);
 
+  // Component tests (A06 Button/Text, A07 CategoryIcon, A05 useStrings hook):
+  // Use babel-preset-expo so that jest-expo setup files work correctly and
+  // process.env.EXPO_OS is inlined. BABEL_ENV=rn-test is set by the
+  // "components" jest project.
+  if (process.env.BABEL_ENV === "rn-test") {
+    return {
+      presets: ["babel-preset-expo"],
+    };
+  }
+
   // For tests that target the node environment (DB, repo, core-wiring tests),
   // use @babel/preset-env targeting Node. This avoids having to boot
   // the full React Native / jest-expo runtime just to test pure-JS logic.
