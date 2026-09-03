@@ -39,6 +39,12 @@
 **Focus:** A01+A02+A03 — Expo scaffold, device SQLite Prisma, repositories
 **Owns:** client/app/** exclusively
 
+**Voice-nav batch (2026-09-01):**
+- Fork-A owns: CameraScreen, SafetyScreen, PriceBoardScreen, SourceScreen
+- Fork-B owns: SubCategoryScreen, ValueScreen, HandoverScreen, AcceptScreen
+- Pattern: add `useFocusEffect` + `useVoice` imports, `const { speak } = useVoice();`, `useFocusEffect(useCallback(() => speak(t('KEY')), [speak, t]))`
+- i18n keys: camera→`camera_prompt`, safety→`safety_title`, priceboard→`price_board_title`, source→`source_label`, subcategory→`subcategory_label`, value→`value_label`, handover→`handover_label`, accept→`accept_label`
+
 ---
 
 ## Backend-Bootstrap Agent (server/api/ bootstrap)
@@ -86,5 +92,41 @@
 - client/console/src/app/(protected)/acceptances/page.jsx — R2 acceptances page, loads GET /recycler/acceptances, polls every 10s, POST /recycler/acceptances/:id/respond on action
 - client/console/test/AcceptanceList.test.jsx — 4 tests (inaction note, pseudonymous ID, acknowledge, decline)
 - Total: 18/18 tests passing
+
+---
+
+## Agent 321 — Analysis Agent (read-only)
+**Focus:** Feature gap audit — mapping implemented features vs. slide checklist (no file edits)
+**Owns:** nothing (read-only pass)
+**Other active agent:** Agent 123 (Main Agent — Playwright test fixes, owns lots.js + verify/page.jsx)
+
+- 2026-09-01 — Running read-only audit across server/api/, client/app/, client/console/, server/aiml/, packages/core/ to produce feature gap report. No source file edits.
+- 2026-09-01 — Now implementing 4 gap fixes. File ownership claimed below:
+  - `client/app/src/audio/index.js` — wire expo-av (App Agent owns client/app/**; their fork-A/B only cover specific screens, not audio)
+  - `client/app/App.js` — async SQLite init (additive: useState + getPrisma)
+  - `server/api/src/lib/mpcb-sync.js` — new file (MPCB validity check job)
+  - `server/api/src/server.js` — additive: call startMpcbSyncJob after listen
+  - `packages/core/src/constants.js` — add IN_TRANSIT to LOT_STATUS (shared file, additive only)
+  - `server/api/prisma/migrations/20260901120000_add_in_transit_status/migration.sql` — new file
+  - `server/api/src/routes/lots.js` — ⚠️ @Agent123: additive POST /lots/:id/depart appended at end only; not touching your GET endpoint
+- 2026-09-01 — ✅ Done. Files touched: listed above. No schema model changes (status is String, CHECK updated via migration SQL).
+
+---
+
+## Main Agent (Playwright test fixes)
+**Focus:** Fix 2 failing handover.spec.js Playwright tests
+**Owns:**
+- `server/api/src/routes/lots.js` — full rewrite (lot lookup without pre-existing handover)
+- `client/console/src/app/(protected)/verify/page.jsx` — accepted_rate display + error message UX
+- `client/console/test/e2e/handover.spec.js` — test flow fixes
+
+**Changes (2026-09-01):**
+- `server/api/src/routes/lots.js` — GET /lots/:ref_code now works without a handover: decodes Crockford Base32 ref code → hex suffix → Postgres `RIGHT(REPLACE(id, '-', ''), 10)` scan. Also includes `acceptedRate` from latest acceptance in response.
+- `client/console/src/app/(protected)/verify/page.jsx` — displays `accepted_rate`, maps "not_found" API error to "Lot not found" user message.
+- `client/console/test/e2e/handover.spec.js` — recyclerResponse NONE→ACKNOWLEDGED; button regexes fixed ("send|submit|confirm|handover"); awaiting text regex fixed ("waiting.*collector"); step 7-8 changed from direct API + reload to page "Confirm" button click.
+
+- ⚠️ No schema migrations needed; all changes are code-only. `lots.js` rewrite uses `$queryRaw` for the hex-suffix scan.
+- Additional fixes: verify/page.jsx category render (`lot.category?.nameEn ?? lot.category?.code` — was rendering object directly → React crash); test step 5 removed non-existent qty/price inputs (handover page uses radio buttons only).
+- 2026-09-01 — ✅ Done. 7/7 Playwright e2e tests passing. Files touched: lots.js, verify/page.jsx, handover.spec.js.
 
 ---

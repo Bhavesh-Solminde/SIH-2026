@@ -8,6 +8,7 @@ coverage/
 server/api/uploads/
 server/aiml/.venv/
 server/aiml/__pycache__/
+**/__pycache__/
 client/app/.expo/
 client/app/android/
 test-results/
@@ -16,3 +17,10 @@ client/app/src/db/generated/
 client/app/src/db/generated-node/
 client/app/prisma/.env
 client/app/prisma/bhaav.db
+
+# OS / editor / local tooling
+.DS_Store
+**/.DS_Store
+.superpowers/
+.claude/
+**/.claude/
