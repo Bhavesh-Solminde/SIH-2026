@@ -48,7 +48,7 @@ export async function makeRecycler(over = {}) {
       lat: 19.4,
       lng: 72.84,
       type: "RECYCLER",
-      registrationNo: `REG-${uuidv7().slice(0, 8)}`,
+      registrationNo: `REG-${uuidv7().replace(/-/g, "").slice(0, 16)}`,
       authorizationStatus: "VALID",
       serviceAreaKm: 25,
       materialsAccepted: ["PCB"],

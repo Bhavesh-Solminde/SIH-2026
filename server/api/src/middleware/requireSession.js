@@ -1,15 +1,18 @@
 import { prisma } from "../db.js";
+import { log } from "../lib/logger.js";
 
 /**
  * Express middleware: reads the session token from the bhaav_session cookie,
  * looks up recycler_session (checking expiry), and attaches req.recycler =
- * { id, name, email } for downstream handlers. Returns 401 if missing or
- * expired.
+ * { id, name, email } for downstream handlers. Returns 401 if missing or expired.
  */
 export async function requireSession(req, res, next) {
   try {
     const token = req.cookies?.bhaav_session;
-    if (!token) return res.status(401).json({ error: "unauthenticated" });
+    if (!token) {
+      log.auth.debug("requireSession: no cookie on", req.path);
+      return res.status(401).json({ error: "unauthenticated" });
+    }
 
     const session = await prisma.recyclerSession.findUnique({
       where: { token },
@@ -20,9 +23,13 @@ export async function requireSession(req, res, next) {
       },
     });
 
-    if (!session) return res.status(401).json({ error: "unauthenticated" });
+    if (!session) {
+      log.auth.warn("requireSession: token not found", { path: req.path });
+      return res.status(401).json({ error: "unauthenticated" });
+    }
+
     if (session.expiresAt < new Date()) {
-      // Expired — clean up and reject
+      log.auth.warn("requireSession: session expired", { path: req.path, recycler: session.account?.recycler?.name });
       await prisma.recyclerSession.delete({ where: { token } }).catch(() => {});
       return res.status(401).json({ error: "session_expired" });
     }
@@ -32,8 +39,10 @@ export async function requireSession(req, res, next) {
       name: session.account.recycler.name,
       email: session.account.email,
     };
+    log.auth.debug("requireSession: ok", { recycler: req.recycler.name, path: req.path });
     return next();
   } catch (err) {
+    log.auth.error("requireSession error", err);
     return next(err);
   }
 }
