@@ -23,7 +23,7 @@ export const SOURCE_TYPES = [
   "STREET",
   "OTHER",
 ];
-export const LOT_STATUS = ["DRAFT", "ACCEPTED", "HANDED_OVER", "CANCELLED"];
+export const LOT_STATUS = ["DRAFT", "ACCEPTED", "IN_TRANSIT", "HANDED_OVER", "CANCELLED"];
 export const HANDOVER_STATUS = ["PENDING_COLLECTOR", "CONFIRMED", "DISPUTED"];
 export const AUTH_STATUS = ["VALID", "LAPSED_IN_LIST"];
 export const RATE_SOURCES = ["RECYCLER_PUBLISHED", "FIELD_COLLECTED", "MARKET_INDICATIVE"];
@@ -44,12 +44,13 @@ export const DOWNGRADE_REASON_CODES = [
   "OTHER",
 ];
 
-// AI.md section 2. Shown in the deck as-is.
+// AI.md section 2 (updated: pickup removed, rateMatch added per product spec).
+// rateMatch: how close the recycler's rate is to the collector's expected rate.
+// When no expectedRate provided, this term is ignored (collapses to 0.5 constant).
 export const RANKING_WEIGHTS = {
-  value: 0.55,
-  distance: 0.3,
-  pickup: 0.1,
-  staleness: 0.05,
+  rateMatch: 0.50,   // closeness of recycler rate to collector's expected rate
+  distance:  0.30,   // prefer nearby recyclers
+  staleness: 0.20,   // prefer recently updated rates
 };
 
 // Staleness is normalised over this window before the weight is applied.

@@ -5,7 +5,8 @@
   "workspaces": ["packages/*", "server/api", "client/console"],
   "engines": { "node": ">=22" },
   "scripts": {
-    "dev": "concurrently -n api,console -c blue,magenta \"npm -w @bhaav/api run dev\" \"npm -w @bhaav/console run dev\"",
+    "dev": "concurrently --kill-others-on-fail -n api,console,app -c blue,magenta,green \"npm -w @bhaav/api run dev\" \"npm -w @bhaav/console run dev\" \"npm --prefix client/app start\"",
+    "start": "concurrently --kill-others-on-fail -n api,console,app -c blue,magenta,green \"npm -w @bhaav/api run dev\" \"npm -w @bhaav/console run dev\" \"npm --prefix client/app start\"",
     "seed": "npm -w @bhaav/api run seed",
     "migrate": "npm -w @bhaav/api run migrate",
     "test": "vitest run"
