@@ -142,26 +142,60 @@ module.exports = {
     {
       displayName: "components",
       preset: "jest-expo/android",
+      // Jest auto-applies ANY `__mocks__/<pkg>.js` file found while crawling
+      // a project's `roots` as a manual mock for a same-named node_modules
+      // package — no `jest.mock()` call needed, and this bypasses the
+      // "screens" project's own explicit moduleNameMapper scoping entirely.
+      // Since `roots` defaults to the whole `<rootDir>`, this project was
+      // picking up `test/__mocks__/react-native.js` (a deliberately minimal
+      // fake built for the "screens" project's plain-node tests: 20 exports,
+      // no Modal/Switch/many others) and silently substituting it for the
+      // real `react-native` package here too. `detectHostComponentNames`
+      // renders View+Text+TextInput+Image+Switch+ScrollView+Modal in one
+      // tree to auto-detect RN's host component names; with the fake
+      // react-native in place, `Switch` and `Modal` were `undefined`, so
+      // React threw "Element type is invalid ... got: undefined" for every
+      // render() call in all four suites here — regardless of whether the
+      // component under test used Switch or Modal at all. Scoping `roots` to
+      // this project's own test/source directories (excluding
+      // `test/__mocks__`) keeps Jest's mock-discovery crawl from ever seeing
+      // that file, so `require("react-native")` resolves to the real
+      // package, as jest-expo/android's setupFiles (react-native/jest/setup.js
+      // + jest-expo/src/preset/setup.js) expect.
+      roots: [
+        "<rootDir>/src",
+        "<rootDir>/test/ui",
+        "<rootDir>/test/components",
+        "<rootDir>/test/i18n",
+      ],
       testMatch: [
         "<rootDir>/test/i18n/useStrings.test.js",
         "<rootDir>/test/ui/**/*.test.js",
         "<rootDir>/test/components/**/*.test.js",
       ],
       testEnvironmentOptions: {},
-      // The previous `globals: { "babel-jest": { BABEL_ENV: "rn-test" } }` here
-      // did nothing: jest `globals` only seeds the test VM's global object, it
-      // never sets process.env, so babel.config.js's BABEL_ENV check never saw
-      // it. Because jest itself sets NODE_ENV=test, babel.config.js's
-      // `NODE_ENV === "test"` branch won, giving this project plain
-      // @babel/preset-env — which cannot parse the Flow-typed
-      // @react-native/js-polyfills sources jest-expo pulls in, and every suite
-      // here died at transform time with "error-guard.js: Missing semicolon
-      // (14:4)" without running a single test. Setting the transform directly
-      // to babel-preset-expo (which understands Flow/RN sources) fixes this
-      // regardless of what babel.config.js's env-based branching does.
-      transform: {
-        "^.+\\.[jt]sx?$": ["babel-jest", { presets: ["babel-preset-expo"] }],
-      },
+      // No `transform` override here on purpose. jest-expo/android's own
+      // preset (node_modules/jest-expo/jest-preset.js) already wires up its
+      // own babel-jest transform for this project — an earlier attempt
+      // additionally set a project-level `transform` key to force
+      // `{ presets: ["babel-preset-expo"] }`, fully replacing that transform
+      // key from the preset (project config keys always win over a preset's
+      // same key; note this project deliberately never sets `setupFiles`, so
+      // the preset's setupFiles were never at risk of being replaced this
+      // way — that hypothesis was checked and ruled out). Confirmed
+      // experimentally: removing that override while keeping the preset
+      // reintroduced the original Flow-parse crash ("error-guard.js: Missing
+      // semicolon"), because babel.config.js selected its @babel/preset-env
+      // branch under jest's NODE_ENV=test for this project too. The correct
+      // fix is in babel.config.js, not here: it now branches on
+      // `api.caller(...caller.name === "metro")`, which is true only when
+      // jest-expo/android's own transform invokes it (it always passes a
+      // `metro` caller) — so this project reliably gets babel-preset-expo via
+      // the preset's own transform, with no override needed, while the other
+      // projects' inline `transform:` configs (default "babel-jest" caller)
+      // keep getting @babel/preset-env. That fix alone was not sufficient:
+      // see the `roots` comment above for the second, independent cause of
+      // the `detectHostComponentNames` failures.
       transformIgnorePatterns: [
         // Transform react-native, expo, and @bhaav/core (all ship ESM or Flow/TS).
         "/node_modules/(?!(.pnpm|react-native|@react-native|@react-native-community|expo|@expo|@bhaav/core|react-navigation|@react-navigation))",
