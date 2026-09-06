@@ -3,12 +3,22 @@ import { prisma } from "../db.js";
 import { requireSession } from "../middleware/requireSession.js";
 import { uuidv7, referenceCodeFromUuid } from "@bhaav/core/ids";
 import { callPredict } from "../lib/aiml.js";
+import { getReferencePrice } from "../lib/referencePrice.js";
+import { getBuyerOfferForLot } from "../lib/buyerOffer.js";
 import { log } from "../lib/logger.js";
 
 export const handoverRouter = Router();
 
-// Condition factors — DB.md 3.5 / condition_factor table
-const CONDITION_FACTOR = { GOOD: 1.0, FAIR: 0.85, POOR: 0.7 };
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const DOWNGRADE_REASON_CODES = new Set([
+  "POOR_CONDITION",
+  "MIXED_GRADE",
+  "LOW_RECOVERABLE",
+  "TRANSPORT_DISTANCE",
+  "BULK_DISCOUNT",
+  "LOCAL_RATE_LOWER",
+  "OTHER",
+]);
 
 // ---------------------------------------------------------------------------
 // GET /handover/pending?device_id=xxx  — no auth
@@ -64,20 +74,25 @@ handoverRouter.get("/pending", async (req, res, next) => {
 // ---------------------------------------------------------------------------
 // POST /handover  (requires recycler session)
 //
-// The recycler submits the inspected condition (and optional downgrade code).
+// The recycler submits the inspected condition, final negotiated unit price,
+// and optional downgrade code.
 // Creates the handover row with PENDING_COLLECTOR status; the collector
 // counter-signs in the next call.
 //
-// Body: { lot_id, inspected_condition, downgrade_reason_code? }
+// Body: { lot_id, inspected_condition, final_unit_price, downgrade_reason_code? }
 // ---------------------------------------------------------------------------
 handoverRouter.post("/", requireSession, async (req, res, next) => {
   try {
-    const { lot_id, inspected_condition, downgrade_reason_code } = req.body ?? {};
-    log.handover.info("create handover", { lot_id, inspected_condition, recycler: req.recycler.id });
+    const { lot_id, inspected_condition, final_unit_price, downgrade_reason_code } = req.body ?? {};
+    log.handover.info("create handover", { lot_id, inspected_condition, final_unit_price, recycler: req.recycler.id });
 
     if (!lot_id || !inspected_condition) {
       log.handover.warn("missing required fields", { lot_id, inspected_condition });
       return res.status(400).json({ error: "lot_id_and_inspected_condition_required" });
+    }
+
+    if (!UUID_PATTERN.test(lot_id)) {
+      return res.status(400).json({ error: "invalid_lot_id", detail: lot_id });
     }
 
     const VALID_CONDITIONS = new Set(["GOOD", "FAIR", "POOR"]);
@@ -86,16 +101,34 @@ handoverRouter.post("/", requireSession, async (req, res, next) => {
       return res.status(400).json({ error: "invalid_inspected_condition", detail: inspected_condition });
     }
 
-    const lot = await prisma.lot.findUnique({ where: { id: lot_id } });
+    const finalUnitPrice = Number(final_unit_price);
+    if (
+      final_unit_price === undefined ||
+      final_unit_price === null ||
+      !Number.isFinite(finalUnitPrice) ||
+      finalUnitPrice < 0
+    ) {
+      return res.status(400).json({ error: "invalid_final_unit_price", detail: final_unit_price });
+    }
+
+    if (downgrade_reason_code != null && !DOWNGRADE_REASON_CODES.has(downgrade_reason_code)) {
+      return res.status(400).json({
+        error: "invalid_downgrade_reason_code",
+        detail: downgrade_reason_code,
+      });
+    }
+
+    const lot = await prisma.lot.findUnique({
+      where: { id: lot_id },
+      include: { category: { select: { code: true } } },
+    });
     if (!lot) {
       log.handover.warn("lot not found", { lot_id });
       return res.status(404).json({ error: "lot_not_found" });
     }
 
-    const acceptance = await prisma.acceptance.findFirst({
-      where: { lotId: lot_id, recyclerId: req.recycler.id, recyclerResponse: "ACKNOWLEDGED" },
-    });
-    if (!acceptance) {
+    const buyerOffer = await getBuyerOfferForLot(lot_id, req.recycler.id);
+    if (buyerOffer.status !== "FOUND") {
       log.handover.warn("no acknowledged acceptance", { lot_id, recycler: req.recycler.id });
       return res.status(403).json({ error: "no_acknowledged_acceptance" });
     }
@@ -112,13 +145,18 @@ handoverRouter.post("/", requireSession, async (req, res, next) => {
       });
     }
 
-    const rate = Number(acceptance.acceptedRate);
     const quantity = Number(lot.quantity);
-    const factor = CONDITION_FACTOR[inspected_condition] ?? 1.0;
-    const finalUnitPrice = +(rate * factor).toFixed(2);
     const finalTotal = +(finalUnitPrice * quantity).toFixed(2);
+    const referencePrice = await getReferencePrice(lot.category.code);
 
-    log.handover.debug("pricing", { rate, quantity, condition: inspected_condition, factor, finalUnitPrice, finalTotal });
+    log.handover.debug("pricing", {
+      referencePrice: referencePrice.price,
+      buyerOffer: buyerOffer.price,
+      quantity,
+      condition: inspected_condition,
+      finalUnitPrice,
+      finalTotal,
+    });
 
     const now = new Date();
     const id = uuidv7();
@@ -127,7 +165,14 @@ handoverRouter.post("/", requireSession, async (req, res, next) => {
     const handover = await prisma.handover.create({
       data: {
         id, lotId: lot_id, recyclerId: req.recycler.id, referenceCode,
-        inspectedQuantity: quantity, finalUnitPrice, finalTotal,
+        inspectedQuantity: quantity,
+        referencePriceSnapshot: referencePrice.price,
+        referencePriceUnit: referencePrice.unit,
+        referencePriceStatus: referencePrice.status,
+        buyerOfferSnapshot: buyerOffer.price,
+        buyerOfferUnit: buyerOffer.unit,
+        finalUnitPrice,
+        finalTotal,
         inspectedCondition: inspected_condition,
         downgradeReasonCode: downgrade_reason_code ?? null,
         handoverTs: now, recyclerConfirmedAt: now, status: "PENDING_COLLECTOR",
@@ -137,8 +182,10 @@ handoverRouter.post("/", requireSession, async (req, res, next) => {
     log.handover.info("handover created", { id, lot_id, finalTotal, referenceCode });
 
     scoreHandover({
-      handoverId: id, lotId: lot_id, recyclerId: req.recycler.id,
-      referencePrice: rate, buyerOffer: rate, finalPrice: finalUnitPrice,
+      handoverId: id, lotId: lot_id, recyclerId: req.recycler.id, collectorId: lot.collectorId,
+      referencePrice: referencePrice.price,
+      buyerOffer: buyerOffer.price,
+      finalPrice: finalUnitPrice,
       condition: inspected_condition,
     }).catch((err) => log.handover.warn("score fire-and-forget failed", err));
 
@@ -158,7 +205,7 @@ handoverRouter.post("/", requireSession, async (req, res, next) => {
  * Fire-and-forget: call the Vercel ML model and persist any anomaly flag.
  * Never throws — callers must catch().
  */
-async function scoreHandover({ handoverId, lotId, recyclerId, referencePrice, buyerOffer, finalPrice, condition }) {
+async function scoreHandover({ handoverId, lotId, recyclerId, collectorId, referencePrice, buyerOffer, finalPrice, condition }) {
   const result = await callPredict({
     reference_price: referencePrice,
     buyer_offer_per_kg: buyerOffer,
@@ -184,6 +231,8 @@ async function scoreHandover({ handoverId, lotId, recyclerId, referencePrice, bu
         detectorCode: "ML_PRICE_ANOMALY",
         severity,
         detail: {
+          collector_id: collectorId,
+          recycler_id: recyclerId,
           score,
           risk_level,
           features,

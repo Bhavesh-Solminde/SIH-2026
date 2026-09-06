@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../db.js";
 import { requireSession } from "../middleware/requireSession.js";
 import { log } from "../lib/logger.js";
+import { callPredict } from "../lib/aiml.js";
 import { referenceCodeFromUuid } from "@bhaav/core/ids";
 
 export const recyclerRouter = Router();
@@ -122,7 +123,7 @@ recyclerRouter.get("/acceptances", async (req, res, next) => {
       include: {
         category: { select: { code: true, nameEn: true, nameMr: true } },
         collector: { select: { id: true, operatingArea: true } },
-        handover:  { select: { status: true } },
+        handover: { select: { status: true } },
       },
     };
 
@@ -140,18 +141,18 @@ recyclerRouter.get("/acceptances", async (req, res, next) => {
     ]);
 
     const mapRow = (a) => ({
-      id:               a.id,
-      lotId:            a.lotId,
-      acceptedRate:     Number(a.acceptedRate),
-      acceptedUnit:     a.acceptedUnit,
-      acceptedTs:       a.acceptedTs,
+      id: a.id,
+      lotId: a.lotId,
+      acceptedRate: Number(a.acceptedRate),
+      acceptedUnit: a.acceptedUnit,
+      acceptedTs: a.acceptedTs,
       recyclerResponse: a.recyclerResponse,
-      categoryCode:     a.lot.category?.code ?? null,
-      quantity:         Number(a.lot.quantity),
-      unit:             a.lot.unit,
-      condition:        a.lot.condition,
-      estimatedValue:   a.lot.estimatedValue ? Number(a.lot.estimatedValue) : null,
-      collectorId:      a.lot.collector.id.slice(0, 8),
+      categoryCode: a.lot.category?.code ?? null,
+      quantity: Number(a.lot.quantity),
+      unit: a.lot.unit,
+      condition: a.lot.condition,
+      estimatedValue: a.lot.estimatedValue ? Number(a.lot.estimatedValue) : null,
+      collectorId: a.lot.collector.id.slice(0, 8),
     });
 
     const readyToInspect = acknowledgedRows
@@ -178,8 +179,8 @@ recyclerRouter.post("/acceptances/:id/respond", async (req, res, next) => {
       action === "ACKNOWLEDGED"
         ? "ACCEPT"
         : action === "DECLINED"
-        ? "REJECT"
-        : action;
+          ? "REJECT"
+          : action;
 
     if (canonical !== "ACCEPT" && canonical !== "REJECT") {
       return res
@@ -334,6 +335,117 @@ recyclerRouter.get("/history", async (req, res, next) => {
       page,
       totalPages: Math.ceil(total / limit),
       total,
+    });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// POST /recycler/flags/check — score one persisted handover with the ML model.
+recyclerRouter.post("/flags/check", async (req, res, next) => {
+  try {
+    const { handover_id } = req.body ?? {};
+    if (!handover_id) {
+      return res.status(400).json({ error: "handover_id_required" });
+    }
+
+    const handover = await prisma.handover.findFirst({
+      where: { id: handover_id, recyclerId: req.recycler.id },
+      select: {
+        id: true,
+        referencePriceSnapshot: true,
+        referencePriceUnit: true,
+        referencePriceStatus: true,
+        buyerOfferSnapshot: true,
+        buyerOfferUnit: true,
+        finalUnitPrice: true,
+        inspectedCondition: true,
+        lot: { select: { unit: true, collectorId: true } },
+      },
+    });
+
+    if (!handover) {
+      return res.status(404).json({ error: "handover_not_found" });
+    }
+
+    const prices = {
+      reference_price: handover.referencePriceSnapshot === null
+        ? null
+        : Number(handover.referencePriceSnapshot),
+      buyer_offer_per_kg: handover.buyerOfferSnapshot === null
+        ? null
+        : Number(handover.buyerOfferSnapshot),
+      final_price_per_kg: Number(handover.finalUnitPrice),
+      condition: handover.inspectedCondition,
+    };
+
+    const unitsAreKg =
+      handover.referencePriceStatus === "RESOLVED" &&
+      handover.referencePriceUnit === "KG" &&
+      handover.buyerOfferUnit === "KG" &&
+      handover.lot.unit === "KG";
+
+    if (!unitsAreKg || prices.reference_price === null || prices.buyer_offer_per_kg === null) {
+      return res.status(422).json({
+        error: "handover_not_scoreable",
+        reason: "reference price must be RESOLVED and all prices must use KG",
+        handover_id,
+        prices,
+        reference_price_status: handover.referencePriceStatus,
+        reference_price_unit: handover.referencePriceUnit,
+        buyer_offer_unit: handover.buyerOfferUnit,
+        lot_unit: handover.lot.unit,
+      });
+    }
+
+    const result = await callPredict(prices);
+    if (!result.ok) {
+      return res.status(502).json({
+        error: "model_unavailable",
+        reason: result.reason,
+        handover_id,
+        prices,
+      });
+    }
+
+    let flag = null;
+    if (result.body.anomaly) {
+      const severity = result.body.risk_level === "CRITICAL" ? "CRITICAL" : "WARN";
+      flag = await prisma.anomalyFlag.findFirst({
+        where: {
+          subjectType: "HANDOVER",
+          subjectId: handover.id,
+          detectorCode: "ML_PRICE_ANOMALY",
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      if (!flag) {
+        flag = await prisma.anomalyFlag.create({
+          data: {
+            subjectType: "HANDOVER",
+            subjectId: handover.id,
+            detectorCode: "ML_PRICE_ANOMALY",
+            severity,
+            detail: {
+              collector_id: handover.lot.collectorId,
+              recycler_id: req.recycler.id,
+              ...prices,
+              score: result.body.score,
+              threshold: result.body.threshold,
+              risk_level: result.body.risk_level,
+              features: result.body.features,
+            },
+          },
+        });
+      }
+    }
+
+    return res.json({
+      handover_id: handover.id,
+      prices,
+      model: result.body,
+      flag,
     });
   } catch (err) {
     return next(err);
