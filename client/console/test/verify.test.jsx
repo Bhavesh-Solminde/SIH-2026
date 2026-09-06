@@ -2,9 +2,16 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import VerifyPage from "../src/app/(protected)/verify/page.jsx";
 
-// Mock navigation (used by Nav and useSession)
+// Mock navigation (used by Nav and useSession).
+// The page uses useSearchParams (verify/page.jsx:30) and Nav uses useRouter.
+// A partial mock of next/navigation throws "No <hook> export is defined",
+// which is why these four never got as far as their assertions.
 const push = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push }),
+  useSearchParams: () => new URLSearchParams(),
+  usePathname: () => "/verify",
+}));
 
 // Mock api
 vi.mock("../src/lib/api.js", () => ({
@@ -19,15 +26,19 @@ vi.mock("../src/lib/useSession.js", () => ({
 
 const { api } = await import("../src/lib/api.js");
 
+// Shape matches what verify/page.jsx actually reads off a lot (page.jsx:166,
+// 171, 175, 182, 187): categoryCode (falls back from category.nameEn/code),
+// quantity + unit, condition, accepted_rate/accepted_unit, estimated_value.
 const MOCK_LOT = {
   id: "lot-abc",
   reference_code: "LOT-2026-001",
-  category: "PCB",
+  categoryCode: "PCB",
   quantity: 5,
   unit: "KG",
   condition: "GOOD",
+  accepted_rate: 420,
+  accepted_unit: "KG",
   estimated_value: 2100,
-  photos: [],
 };
 
 beforeEach(() => {
@@ -41,7 +52,7 @@ describe("VerifyPage", () => {
     api.get.mockResolvedValue({ lot: MOCK_LOT });
     render(<VerifyPage />);
 
-    const input = screen.getByPlaceholderText(/scan qr code/i);
+    const input = screen.getByPlaceholderText(/e\.g\. a1b2c3d4/i);
     fireEvent.change(input, { target: { value: "LOT-2026-001" } });
     fireEvent.click(screen.getByRole("button", { name: /look up lot/i }));
 
@@ -54,18 +65,16 @@ describe("VerifyPage", () => {
     api.get.mockResolvedValue({ lot: MOCK_LOT });
     render(<VerifyPage />);
 
-    fireEvent.change(screen.getByPlaceholderText(/scan qr code/i), {
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. a1b2c3d4/i), {
       target: { value: "LOT-2026-001" },
     });
     fireEvent.click(screen.getByRole("button", { name: /look up lot/i }));
 
     await waitFor(() => expect(screen.getByText("PCB")).toBeInTheDocument());
     // quantity with unit
-    expect(screen.getByText(/5/)).toBeInTheDocument();
-    // "GOOD" appears in the collector-condition dd; use getAllByText since it
-    // also appears in the inspected-condition radio buttons
-    const goodEls = screen.getAllByText("GOOD");
-    expect(goodEls.length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/5 KG/)).toBeInTheDocument();
+    // Collector-reported condition, shown as a badge (page.jsx:175).
+    expect(screen.getByText("GOOD")).toBeInTheDocument();
   });
 
   it("submits the handover form and calls POST /handover with correct body", async () => {
@@ -74,14 +83,15 @@ describe("VerifyPage", () => {
     render(<VerifyPage />);
 
     // Phase 1: scan
-    fireEvent.change(screen.getByPlaceholderText(/scan qr code/i), {
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. a1b2c3d4/i), {
       target: { value: "LOT-2026-001" },
     });
     fireEvent.click(screen.getByRole("button", { name: /look up lot/i }));
     await waitFor(() => expect(screen.getByText("PCB")).toBeInTheDocument());
 
-    // Phase 2: select condition and submit
-    fireEvent.click(screen.getByLabelText("GOOD"));
+    // Phase 2: select condition (matches the collector's own — no downgrade
+    // reason required) and submit
+    fireEvent.click(screen.getByRole("button", { name: /good/i }));
     fireEvent.click(screen.getByRole("button", { name: /send to collector/i }));
 
     await waitFor(() =>
@@ -101,14 +111,14 @@ describe("VerifyPage", () => {
     render(<VerifyPage />);
 
     // Phase 1: scan
-    fireEvent.change(screen.getByPlaceholderText(/scan qr code/i), {
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. a1b2c3d4/i), {
       target: { value: "LOT-2026-001" },
     });
     fireEvent.click(screen.getByRole("button", { name: /look up lot/i }));
     await waitFor(() => expect(screen.getByText("PCB")).toBeInTheDocument());
 
     // Phase 2: submit handover
-    fireEvent.click(screen.getByLabelText("GOOD"));
+    fireEvent.click(screen.getByRole("button", { name: /good/i }));
     fireEvent.click(screen.getByRole("button", { name: /send to collector/i }));
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /confirm/i })).toBeInTheDocument()
