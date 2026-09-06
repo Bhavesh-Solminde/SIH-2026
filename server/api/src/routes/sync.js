@@ -1,6 +1,14 @@
 import { Router } from "express";
 import { prisma } from "../db.js";
 import { validateRecord } from "@bhaav/core/validate";
+import { referenceCodeFromUuid } from "@bhaav/core/ids";
+import { sendSms, smsEnabled } from "../lib/sms.js";
+import { logger } from "../lib/logger.js";
+
+// The pre-built `log` export has no `public` or `sms` namespace — same
+// situation lib/sms.js and routes/public.js document for themselves. Use the
+// generic factory rather than inventing a key on the shared object.
+const smsLog = logger("sms");
 
 export const syncRouter = Router();
 
@@ -233,6 +241,18 @@ const writers = {
   },
 
   async acceptance(tx, p) {
+    // Read before the upsert so we know whether THIS call is the one that
+    // creates the row, or an idempotent replay of a batch the device already
+    // landed. writers.acceptance runs again every time an outbox is
+    // re-pushed (upsert/update:{} is exactly what makes that retry safe —
+    // see the design-decision comment above POST /push), so this is the only
+    // way to fire the recycler notification once per acceptance rather than
+    // once per retry.
+    const existing = await tx.acceptance.findUnique({
+      where: { id: p.id },
+      select: { id: true },
+    });
+
     await tx.acceptance.upsert({
       where: { id: p.id },
       update: {},
@@ -247,6 +267,49 @@ const writers = {
         responseTs: p.response_ts ? new Date(p.response_ts) : null,
       },
     });
+
+    // Recycler SMS on the OFFLINE acceptance path. POST /public/lots
+    // (public.js) already notifies the recycler when the collector has
+    // signal at the moment of acceptance; this is the same event arriving
+    // later, via the device's outbox once it regains connectivity — the
+    // primary journey for an app whose whole premise is offline-first.
+    //
+    // Only for a genuinely NEW acceptance (see `existing` above) — never on
+    // a re-pushed batch's idempotent replay, or a flaky device retrying its
+    // outbox would text the recycler once per retry.
+    //
+    // Mirrors public.js's notification exactly: same guard (smsEnabled() +
+    // recycler.phone), same fire-and-forget shape (void ... .then().catch(),
+    // never awaited, fired after the write above has committed), same
+    // message wording. The one structural difference is unavoidable: an
+    // acceptance payload carries no category or quantity (public.js has them
+    // in scope already because it just created the lot in the same request),
+    // so they're read from the lot here — two cheap primary-key lookups, not
+    // part of the fire-and-forget chain itself.
+    if (!existing) {
+      const [recycler, lot] = await Promise.all([
+        tx.recycler.findUnique({ where: { id: p.recycler_id }, select: { phone: true } }),
+        tx.lot.findUnique({
+          where: { id: p.lot_id },
+          select: { unit: true, quantity: true, category: { select: { code: true } } },
+        }),
+      ]);
+
+      if (smsEnabled() && recycler?.phone && lot) {
+        const message =
+          `Bhaav: new acceptance. ${lot.category?.code ?? "?"} ${num(lot.quantity)}${String(lot.unit).toLowerCase()}, ` +
+          `ref ${referenceCodeFromUuid(p.lot_id)}. Collector arriving. Open console to respond.`;
+        void sendSms({ numbers: recycler.phone, message })
+          .then((result) => {
+            if (!result.ok) {
+              smsLog.warn("recycler notify not sent", { lotId: p.lot_id, reason: result.reason });
+            }
+          })
+          .catch((err) => {
+            smsLog.warn("recycler notify failed", { lotId: p.lot_id, reason: err?.message });
+          });
+      }
+    }
   },
 
   async handover(tx, p) {
