@@ -290,6 +290,27 @@ const writers = {
   },
 };
 
+// Group an already-PUSH_ORDER-sorted array into contiguous same-type runs.
+// Because `sorted` is sorted by PUSH_ORDER index (stable sort), every group
+// this produces is exactly the set of records of one type, in one place —
+// equivalent to filtering per type but a single O(n) pass.
+function groupContiguousByType(arr) {
+  const groups = [];
+  let i = 0;
+  while (i < arr.length) {
+    let j = i + 1;
+    while (j < arr.length && arr[j].type === arr[i].type) j += 1;
+    groups.push(arr.slice(i, j));
+    i = j;
+  }
+  return groups;
+}
+
+// Records of the same type carry no ordering dependency on each other, so
+// within a group they can be applied concurrently. CHUNK bounds how many
+// outstanding writes we hold open against the database at once.
+const CHUNK = 20;
+
 syncRouter.post("/push", async (req, res, next) => {
   try {
     const { records } = req.body ?? {};
@@ -321,7 +342,14 @@ syncRouter.post("/push", async (req, res, next) => {
     const applied = [];
     const rejected = [];
 
-    for (const record of sorted) {
+    // Per-record body, unchanged from the old serial loop: same validation,
+    // same error text, same objects pushed onto applied/rejected. Pushing
+    // directly onto the shared arrays (rather than returning a result) is
+    // safe even when several of these run concurrently — JS has no
+    // preemptive thread interleaving, so each push is atomic and the only
+    // thing that varies under concurrency is the ORDER records land in,
+    // never whether one write corrupts another's outcome.
+    async function applyOne(record) {
       const { type, payload } = record;
       const id = record.id ?? payload?.id;
 
@@ -329,7 +357,7 @@ syncRouter.post("/push", async (req, res, next) => {
       const errors = validateRecord(type, payload);
       if (errors.length > 0) {
         rejected.push({ id, reason: errors.join("; ") });
-        continue;
+        return;
       }
 
       // Reject child records whose lot is not in this batch and not in the DB.
@@ -344,7 +372,7 @@ syncRouter.post("/push", async (req, res, next) => {
         });
         if (!exists) {
           rejected.push({ id, reason: `unknown lot ${payload.lot_id}` });
-          continue;
+          return;
         }
         knownLotIds.add(payload.lot_id);
       }
@@ -356,6 +384,21 @@ syncRouter.post("/push", async (req, res, next) => {
         if (type === "lot") knownLotIds.add(payload.id);
       } catch (err) {
         rejected.push({ id, reason: err.message.split("\n").slice(-1)[0].trim() });
+      }
+    }
+
+    // Per-record semantics are deliberate: good records land, bad ones come
+    // back with a reason, and one bad record never fails the batch. That does
+    // NOT require them to be serial — 200 records was 200 sequential round
+    // trips against a remote database, >15s for a batch a returning collector
+    // can easily produce after a day offline.
+    //
+    // Bounded concurrency, and only WITHIN a group that carries no ordering
+    // dependency. Cross-type ordering (lot before acceptance before handover)
+    // is preserved by processing the groups in sequence.
+    for (const group of groupContiguousByType(sorted)) {
+      for (let i = 0; i < group.length; i += CHUNK) {
+        await Promise.allSettled(group.slice(i, i + CHUNK).map((record) => applyOne(record)));
       }
     }
 
