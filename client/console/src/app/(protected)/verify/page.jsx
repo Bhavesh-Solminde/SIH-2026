@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import Nav from "../../../components/Nav.jsx";
 import HandoverForm from "../../../components/HandoverForm.jsx";
+import QrScanner from "../../../components/QrScanner.jsx";
 import { useSession } from "../../../lib/useSession.js";
 import { api } from "../../../lib/api.js";
 import { rupees } from "../../../lib/format.js";
@@ -50,6 +51,15 @@ export default function VerifyPage() {
   async function handleScan(e) {
     e.preventDefault();
     lookupRef(refCode);
+  }
+
+  // One lookup path for both entry points: a successful QR decode fills
+  // the same reference field the typed form uses, then runs the same
+  // lookupRef() call. Nothing about the request differs by entry point.
+  function handleQrScan(decodedText) {
+    const code = (decodedText ?? "").trim().toUpperCase();
+    setRefCode(code);
+    lookupRef(code);
   }
 
   async function handleHandover({ inspectedCondition, downgradeReasonCode }) {
@@ -199,6 +209,12 @@ export default function VerifyPage() {
               <p style={{ color: "var(--c-muted)", fontSize: ".9rem", marginBottom: "1.5rem" }}>
                 Enter the reference code from the collector's device, or scan the QR code
               </p>
+
+              {/* Fast path: camera scan. Guaranteed path: the form below —
+                  it stays visible and functional no matter what the
+                  scanner does. */}
+              <QrScanner active={!lot} onScan={handleQrScan} />
+
               <form onSubmit={handleScan}>
                 <input
                   type="text"
