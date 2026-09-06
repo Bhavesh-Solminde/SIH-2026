@@ -3,6 +3,7 @@ import { prisma } from "../db.js";
 import { requireSession } from "../middleware/requireSession.js";
 import { uuidv7, referenceCodeFromUuid } from "@bhaav/core/ids";
 import { callPredict } from "../lib/aiml.js";
+import { runDetection } from "../lib/detectRun.js";
 import { log } from "../lib/logger.js";
 
 export const handoverRouter = Router();
@@ -228,6 +229,19 @@ handoverRouter.post("/:lot_id/confirm", async (req, res, next) => {
 
     // final_price = final_total from the handover row (already computed at POST /handover)
     const final_price = Number(updated.finalTotal);
+
+    // Detection is the entire AI/ML claim, and before this it only ran when a
+    // logged-in recycler manually POSTed /detect-run — which nothing did. In a
+    // deployed configuration D1-D13 therefore never fired at all.
+    //
+    // Fired AFTER the update has committed and deliberately NOT awaited: the
+    // same fail-open rule that governs callDetect governs this. A detector
+    // outage must never cost a collector their counter-signature, and a slow
+    // aiml service must never add latency to the handover that both parties are
+    // standing there waiting for.
+    void runDetection(prisma, {}).catch((err) => {
+      log.detect.warn("post-confirm detection failed", { reason: err?.message });
+    });
 
     return res.status(200).json({
       handover_id: updated.id,
