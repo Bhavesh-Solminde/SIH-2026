@@ -88,21 +88,47 @@ def simulate(config: dict) -> dict:
             "profile": profile,
         })
 
-    # Rates: published per recycler per category.
-    # honest_low_grade publishes a lower rate (they cannot cheat upward —
-    # that is the liar's signature that D12 targets).
+    # Rates: a dated series per recycler per category, not a single row.
+    #
+    # A single valid_from made three of eleven detectors unreachable on any
+    # dataset: D3 (bait pricing) needs D3_min_history_days of span to see a
+    # spike revert, D10 (downgrade change-point) needs D10_min_days of dated
+    # history, and D12 (offers that never learn) needs a series to regress.
+    # late_onset_liar existed purely to be caught by D10 and never could be.
+    #
+    # honest_low_grade publishes low from the start and drifts lower — they are
+    # honest about the material. The liars cannot follow: publishing low loses
+    # them the lot, and winning the lot is the entire point. That divergence is
+    # exactly what D12 measures.
+    reprice_every = config.get("reprice_every_days", 14)
     rates = []
     for r, profile in zip(recyclers, profiles):
         for cat in CATEGORIES:
             base = BASE_RATE[cat["code"]]
-            price = base * (0.6 if profile == "honest_low_grade" else 1.0)
-            rates.append({
-                "recycler_id": r["id"],
-                "category_id": cat["id"],
-                "unit": "KG",
-                "price": round(price, 2),
-                "valid_from": start.isoformat(),
-            })
+            for day in range(0, days, reprice_every):
+                if profile == "honest_low_grade":
+                    # Declares what they are, and keeps declaring it downward.
+                    factor = 0.60 - 0.02 * (day / max(reprice_every, 1))
+                elif profile in ("systematic_liar", "late_onset_liar", "monopolist"):
+                    # Must stay high to keep winning lots; small jitter only.
+                    factor = 1.00 + rng.uniform(-0.01, 0.01)
+                else:
+                    factor = 1.00 + rng.uniform(-0.05, 0.05)
+
+                price = base * max(factor, 0.05)
+
+                # D3's target: one recycler spikes to win the ranking, then
+                # reverts within D3_revert_hours. Seeded, so it is reproducible.
+                if profile == "systematic_liar" and day == reprice_every * 2:
+                    price = base * 1.45
+
+                rates.append({
+                    "recycler_id": r["id"],
+                    "category_id": cat["id"],
+                    "unit": "KG",
+                    "price": round(price, 2),
+                    "valid_from": (start + timedelta(days=day)).isoformat(),
+                })
 
     # Some collectors are "genuinely poor" — honest_low_grade concentrates on them.
     poor_collectors = {f"col{i}" for i in range(max(1, n_collectors // 3))}
@@ -111,10 +137,19 @@ def simulate(config: dict) -> dict:
     acceptances: list[dict] = []
     handovers: list[dict] = []
 
-    # Build a rate lookup for O(1) access.
-    rate_lookup: dict[tuple[str, str], float] = {
-        (x["recycler_id"], x["category_id"]): x["price"] for x in rates
-    }
+    # Build a per-pair series, newest last, so a lot can be priced at the rate
+    # that was actually in force on its day rather than at whichever row the
+    # dict happened to keep.
+    rate_series: dict[tuple[str, str], list[dict]] = {}
+    for x in rates:
+        rate_series.setdefault((x["recycler_id"], x["category_id"]), []).append(x)
+    for rows in rate_series.values():
+        rows.sort(key=lambda x: x["valid_from"])
+
+    def rate_on(recycler_id: str, category_id: str, when: datetime) -> float:
+        rows = rate_series[(recycler_id, category_id)]
+        in_force = [x for x in rows if datetime.fromisoformat(x["valid_from"]) <= when]
+        return (in_force[-1] if in_force else rows[0])["price"]
 
     def _downgrade_rate(profile: str, day: int) -> float:
         return {
@@ -148,7 +183,7 @@ def simulate(config: dict) -> dict:
             "collection_ts": ts.isoformat(),
         })
 
-        published = rate_lookup[(r["id"], cat["id"])]
+        published = rate_on(r["id"], cat["id"], ts)
         acceptances.append({
             "id": f"a{n}",
             "lot_id": lot_id,
