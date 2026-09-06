@@ -15,6 +15,19 @@ import { rankRecyclers } from '@bhaav/core/ranking';
 import { haversineKm } from '@bhaav/core/geo';
 import { log } from '../lib/logger';
 import { getCachedRates, setCachedRates, isCacheStale, cacheAgeMinutes } from '../lib/recyclerCache';
+import { AuthorisationPanel } from '../components/AuthorisationPanel.jsx';
+import { RecyclerAuthBadge } from '../components/RecyclerAuthBadge.jsx';
+
+// Best-effort persistence for the authorisation summary only, so the panel
+// can still show last-known counts when the collector is offline — never an
+// AsyncStorage hard dependency, mirroring the pattern in lib/recyclerCache.
+let AsyncStorage = null;
+try {
+  AsyncStorage = require('@react-native-async-storage/async-storage').default;
+} catch {
+  // Not installed — falls back to in-memory only for this session.
+}
+const AUTH_CACHE_KEY = 'bhaav_authorisation_v1';
 
 /**
  * S5 — Value & Ranked Recyclers
@@ -144,13 +157,29 @@ export default function ValueScreen({ navigation, route, db, apiUrl }) {
     if (!apiUrl) return;
     let cancelled = false;
     (async () => {
+      // Show a last-known count immediately — and it's what stays on screen
+      // if the fetch below fails while offline. Never blocks the recycler
+      // list, and never renders an error in its place.
+      if (AsyncStorage) {
+        try {
+          const cachedJson = await AsyncStorage.getItem(AUTH_CACHE_KEY);
+          if (cachedJson && !cancelled) setAuthorisation(JSON.parse(cachedJson));
+        } catch {
+          // Corrupt or unavailable cache — proceed as if there were none.
+        }
+      }
       try {
         const res = await fetch(`${apiUrl}/public/authorisation`);
         if (!res.ok) return;
         const body = await res.json();
         if (!cancelled) setAuthorisation(body);
+        if (AsyncStorage) {
+          try { await AsyncStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(body)); } catch { /* ignore */ }
+        }
       } catch (err) {
-        // Non-fatal: the list still works, it just goes unannotated.
+        // Non-fatal and deliberately silent in the UI: the recycler list
+        // still works. Whatever was set from cache above (or nothing) is
+        // what stays on screen — never an error state here.
         log.value.warn('authorisation fetch failed', { message: err?.message });
       }
     })();
@@ -247,6 +276,20 @@ export default function ValueScreen({ navigation, route, db, apiUrl }) {
 
   const topEstimate = ranked[0]?.value ?? 0;
 
+  // Per-recycler authorisation evidence (MPCB registration number + validity
+  // date), keyed off the raw /public/rates rows rather than the ranked
+  // output — rankRecyclers (packages/core) doesn't carry these fields
+  // through, and they aren't needed for scoring, only for display.
+  const regByRecyclerId = {};
+  for (const r of allRates) {
+    if (!regByRecyclerId[r.recyclerId]) {
+      regByRecyclerId[r.recyclerId] = {
+        registrationNo: r.registrationNo ?? null,
+        validityTo:     r.validityTo ?? null,
+      };
+    }
+  }
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
@@ -263,16 +306,7 @@ export default function ValueScreen({ navigation, route, db, apiUrl }) {
           </View>
         )}
 
-        {authorisation?.listed > 0 && (
-          <View style={styles.authRow}>
-            <Text variant="sm" style={styles.authText}>
-              ✓ {authorisation.listed} पैकी {authorisation.valid} अधिकृत — {authorisation.hiddenFromApp} वगळले
-            </Text>
-            <Text variant="sm" style={styles.authSource}>
-              MPCB · {authorisation.source?.fetchedOn}
-            </Text>
-          </View>
-        )}
+        <AuthorisationPanel authorisation={authorisation} />
 
         {/* ── Market rate range + headline estimate ───────────────────── */}
         <View style={styles.hero}>
@@ -358,9 +392,10 @@ export default function ValueScreen({ navigation, route, db, apiUrl }) {
                         📍 {item.distanceKm.toFixed(1)} km
                       </Text>
                     )}
-                    <Text variant="sm" style={[styles.metaChip, styles.authChip]}>
-                      ✓ अधिकृत
-                    </Text>
+                    <RecyclerAuthBadge
+                      registrationNo={regByRecyclerId[item.recyclerId]?.registrationNo}
+                      validityTo={regByRecyclerId[item.recyclerId]?.validityTo}
+                    />
                   </View>
 
                   {/* Materials accepted */}
@@ -398,11 +433,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primarySurface, padding: spacing[4],
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
-  authRow:       { flexDirection: 'row', justifyContent: 'space-between',
-                   alignItems: 'center', marginBottom: spacing[2] },
-  authText:      { color: colors.primary, fontWeight: '700' },
-  authSource:    { color: colors.textSecondary },
-
   marketRow:     { flexDirection: 'row', alignItems: 'center', gap: spacing[2], marginBottom: spacing[2] },
   marketLabel:   { color: colors.textSecondary },
   marketRange:   { color: colors.primary, fontWeight: '700' },
@@ -431,7 +461,6 @@ const styles = StyleSheet.create({
 
   metaRow:  { flexDirection: 'row', gap: spacing[2], marginBottom: spacing[1], flexWrap: 'wrap' },
   metaChip: { color: colors.textSecondary, fontSize: 12 },
-  authChip: { color: colors.primary, fontWeight: '600' },
 
   matRow:  { flexDirection: 'row', gap: spacing[1], flexWrap: 'wrap', marginTop: spacing[1] },
   matChip: {
