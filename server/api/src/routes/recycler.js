@@ -172,10 +172,14 @@ recyclerRouter.post("/acceptances/:id/respond", async (req, res, next) => {
   try {
     const { id } = req.params;
     const { action } = req.body ?? {};
+
     // Normalise aliases sent by the console UI
-    const canonical = action === "ACKNOWLEDGED" ? "ACCEPT"
-                    : action === "DECLINED"     ? "REJECT"
-                    : action;
+    const canonical =
+      action === "ACKNOWLEDGED"
+        ? "ACCEPT"
+        : action === "DECLINED"
+        ? "REJECT"
+        : action;
 
     if (canonical !== "ACCEPT" && canonical !== "REJECT") {
       return res
@@ -183,27 +187,54 @@ recyclerRouter.post("/acceptances/:id/respond", async (req, res, next) => {
         .json({ error: "action_must_be_ACCEPT_or_REJECT" });
     }
 
-    const existing = await prisma.acceptance.findUnique({ where: { id } });
+    const existing = await prisma.acceptance.findUnique({
+      where: { id },
+    });
+
     if (!existing) {
       return res.status(404).json({ error: "not_found" });
     }
+
     if (existing.recyclerId !== req.recycler.id) {
       return res.status(403).json({ error: "forbidden" });
     }
+
     if (existing.recyclerResponse !== "NONE") {
       return res.status(409).json({ error: "already_responded" });
     }
 
-    const response = canonical === "ACCEPT" ? "ACKNOWLEDGED" : "DECLINED";
-    const updated = await prisma.acceptance.update({
-      where: { id },
-      data: { recyclerResponse: response, responseTs: new Date() },
+    const response =
+      canonical === "ACCEPT"
+        ? "ACKNOWLEDGED"
+        : "DECLINED";
+
+    const result = await prisma.$transaction(async (tx) => {
+      // Update acceptance
+      const updatedAcceptance = await tx.acceptance.update({
+        where: { id },
+        data: {
+          recyclerResponse: response,
+          responseTs: new Date(),
+        },
+      });
+
+      // If recycler accepts, move the lot to ACCEPTED
+      if (canonical === "ACCEPT") {
+        await tx.lot.update({
+          where: { id: existing.lotId },
+          data: {
+            status: "ACCEPTED",
+          },
+        });
+      }
+
+      return updatedAcceptance;
     });
 
     return res.json({
-      id: updated.id,
-      recycler_response: updated.recyclerResponse,
-      response_ts: updated.responseTs,
+      id: result.id,
+      recycler_response: result.recyclerResponse,
+      response_ts: result.responseTs,
     });
   } catch (err) {
     return next(err);
