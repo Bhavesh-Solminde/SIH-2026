@@ -3,7 +3,7 @@
 **Authoritative.** Where this document and any other disagree, this one wins.
 **Companion documents:** `FLOW.md`, `FRONTEND.md`, `SERVER.md`, `AI.md`
 
-Nine tables on the server. One more on the device. Nothing speculative — every column exists because something in the flow reads or writes it.
+Nine core tables on the server, plus `collector_contact` (§3.1a, optional and separate on purpose) and the auth tables (`recycler_account`, `recycler_session`, not detailed here). One more table (`outbox`) on the device. Nothing speculative — every column exists because something in the flow reads or writes it.
 
 ---
 
@@ -51,6 +51,21 @@ CREATE TABLE collector (
 ```
 
 **Four columns, and that is the point.** No name, no Aadhaar, no phone, no photograph of a person. The brief says avoid unnecessary personal information; this table is the evidence that we did, and it is the answer to any DPDP question.
+
+### 3.1a `collector_contact` — *optional, and deliberately not a column on `collector`*
+
+```sql
+CREATE TABLE collector_contact (
+  collector_id uuid PRIMARY KEY REFERENCES collector(id) ON DELETE CASCADE,
+  phone        text NOT NULL,
+  consent_ts   timestamptz NOT NULL,
+  created_at   timestamptz NOT NULL DEFAULT now()
+);
+```
+
+Added for SMS notifications on accept/decline (`SERVER.md` §6.1). It lives in a **separate** table, not a nullable `phone` column on `collector`, on purpose: the argument two paragraphs up — "four columns, and that is the point" — depends on `collector` staying at four columns. A separate table keeps that sentence true word-for-word, gives `consent_ts` somewhere to live, and turns the DPDP erasure right into a single demonstrable `DELETE` on one row, rather than a partial `UPDATE ... SET phone = NULL` on a table that means something else.
+
+**Strictly optional.** No row means no message and no behavioural difference. `README.md` ground rule 7 permits an *optional* phone; it forbids a *mandatory* one. This table is what makes "optional" a schema fact rather than a promise.
 
 ### 3.2 `recycler` — *Recycler Dataset*
 
@@ -102,7 +117,7 @@ CREATE TABLE category (
 
 `critical_minerals` is not decoration. Lithium, cobalt, neodymium, tantalum, gallium, indium are why the **Ministry of Mines** commissioned this statement, and this column is what lets the pitch say so with data behind it.
 
-`expected_qty_min/max` start `NULL` and are populated from real field data. Detector D4 must not run until they are set.
+`expected_qty_min/max` start `NULL` and would be populated from real field data. Detector D4 is registered but **permanently skips** until they are set — that has not happened, and D4 is out of scope for this build (`AI.md` §5, §7).
 
 ### 3.4 `rate` — *Price Dataset*
 
@@ -164,7 +179,7 @@ CREATE TABLE lot (
 
 **`condition` and `source_type` are both named in the brief's Material Dataset** — *"material category, sub-category, material description, image, approximate weight, condition, source type, and estimated value."* They belong on `lot` and they belong here now, because §1 rule 4 applies: a condition column added later leaves every historical row unclassifiable.
 
-- **`condition` is `NOT NULL`.** Three values, one tap, no "unknown" — an unrecorded condition makes the value density detector (D5) meaningless. It affects the estimate through a documented multiplier held in `condition_factor` (below), and it appears on the handover record so both parties saw the same declaration.
+- **`condition` is `NOT NULL`.** Three values, one tap, no "unknown". D5 (value density) was designed to depend on it but is permanently out of scope (§3.9 below) — what actually depends on `condition` today is the whole downgrade-detector family, D9–D13, which compares it against `handover.inspected_condition`. It also affects the estimate through a documented multiplier held in `condition_factor` (below), and it appears on the handover record so both parties saw the same declaration.
 - **`source_type` is nullable** and skippable in the UI. It is analytical rather than transactional — useful for showing where material actually originates, worthless if it slows the collector down.
 
 ```sql
@@ -245,7 +260,7 @@ CREATE TABLE handover (
 **Added 1 September 2026, closing `README.md` open item 9 and `AI-ANOMALY-SPEC` §0.2.**
 `inspected_condition` is what the recycler graded the material *at handover*, as
 against `lot.condition`, which is the collector's declaration at creation.
-Without the pair there is no way to record a downgrade, and detectors D9–D12
+Without the pair there is no way to record a downgrade, and detectors D9–D13
 have nothing to compute over. `downgrade_reason_code` is drawn from the fixed
 list in `AI-ANOMALY-SPEC` §3.2 — never free text, because a fixed list can be
 counted and prose cannot. `collector_protest` is recorded separately from
@@ -278,7 +293,10 @@ CREATE TABLE anomaly_flag (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   subject_type  text NOT NULL CHECK (subject_type IN ('LOT','HANDOVER','RECYCLER','COLLECTOR','MARKET')),
   subject_id    uuid NOT NULL,
-  detector_code text NOT NULL,                       -- D1..D13, see AI.md
+  detector_code text NOT NULL,                       -- one of D1, D2, D3, D6, D7, D8, D9, D10, D11,
+                                                      -- D12, D13, see AI.md §5. D4/D5 are registered
+                                                      -- but permanently skip and never appear here;
+                                                      -- D14 was never built
   severity      text NOT NULL CHECK (severity IN ('INFO','WARN','CRITICAL')),
   detail        jsonb NOT NULL,                      -- the numbers that triggered it
   config_version text,                              -- which threshold set produced this flag
@@ -362,3 +380,5 @@ The **three prices** the flow depends on live in three different tables, which i
 `payment`, `pickup_request`, `message`, `rating`, `notification`, `user`/`password` for collectors, `session`, `audit_log`, brand or model columns, any device-level taxonomy.
 
 Each is easy to add in week two without touching an existing column. **Nothing in section 1 is.** That is the whole basis on which this schema was cut.
+
+**Still true even though SMS now exists (`SERVER.md` §6.1).** No `notification` table was added — an SMS is a stateless, fire-and-forget side effect of a route handler, not a row anyone reads back. `collector_contact` (§3.1a) stores the opt-in number and consent, never a delivery log.

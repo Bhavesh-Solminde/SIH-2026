@@ -100,11 +100,11 @@ These protect us under questioning. Each one has already nearly caught us out.
 
 1. **`LAPSED_IN_LIST` ≠ unlawful.** It means the *published record* shows an expired date; many will have renewed without MPCB republishing. Never say or imply otherwise about a named business.
 2. **Simulated data is labelled simulated** — on screen and in the deck. Every time.
-3. **We trained no model.** Detectors are thresholds today. The honest framing and the roadmap are in `AI.md` §1 and §3.1.
+3. **We trained no model.** Detectors are thresholds today. The honest framing and the roadmap are in `AI.md` §1 and §3.1. **Open question, unresolved on purpose:** a second, separate integration (`callPredict()`, the deployed model at `sihmodel.vercel.app`) returns a `score` against a fixed `threshold` — a shape consistent with a trained model's output. Whether it actually is one has not been confirmed by whoever built it. See `AI.md` §12. Do not say either "we trained no model" or "this is a trained result" about that specific integration until it is confirmed.
 4. **The record is not tamper-proof.** It makes fabrication expensive and detectable *at scale*. GPS can be spoofed; say so before a judge does.
 5. **`condition_factor` (1.0 / 0.85 / 0.70) is a stated assumption**, not a measurement. Field data replaces it.
 6. **Field rates are small and non-representative** — one town, one week, a handful of respondents. Say it first.
-7. **No personal data is collected.** No name, no Aadhaar, no mandatory phone. Most of DPDP therefore does not attach — say *that*, not "DPDP compliant".
+7. **No personal data is collected.** No name, no Aadhaar, no mandatory phone. Most of DPDP therefore does not attach — say *that*, not "DPDP compliant". A collector **may** now opt in to an SMS alert on accept/decline, which requires a phone number — it lives in a separate `collector_contact` table (`DB.md` §3.1a), not on the collector's own record, is off unless given, and is erasable with a single `DELETE`. "No mandatory phone" is still exactly true.
 
 ---
 
@@ -131,19 +131,27 @@ Eight named recyclers. **Three are currently valid, five show lapsed authorisati
 
 ---
 
+## What is still not built — say this plainly
+
+- **D14 (Hazard Gap / evidence-photo reuse)** — not built, deliberately held. See `AI-ANOMALY-SPEC.md` §6.3.
+- **Critical Mineral Ledger** — not built, deliberately held. `Category.criticalMinerals` exists and is seeded, but there is no coefficient table and no aggregation over confirmed handovers. Nothing has been written for it — no schema, no migration, no endpoint.
+- **D4 (weight outlier) and D5 (value density)** — permanently out of scope. Both are registered detector codes that skip with a reason on every run; they are not "pending", they will not run in this build. Blocked on real per-category weight/value distributions that do not exist (open item 7).
+- **DLT sender-ID registration for SMS** — the production path for Fast2SMS is unbuilt and out of scope; the internal round uses route `q` (Quick SMS), which needs no DLT registration (`SERVER.md` §6.1).
+- **Whether the deployed price model (`sihmodel.vercel.app`) is a trained model** — open, unconfirmed by its author. See ground rule 3 above and `AI.md` §12. Do not resolve this in either direction without asking.
+
 ## Open items
 
 | # | Item | Owner | Status |
 |---|---|---|---|
 | 1 | Confirm the `POST /detect` contract in `AI.md` §11 | AI developer | assumed agreed |
-| 2 | Confirm Python + FastAPI, and which detectors are in scope | AI developer | **confirmed — Python + FastAPI. In scope: D1, D2, D3, D6, D7, D8, D9. D4, D5 not built (blocked on item 7)** |
+| 2 | Confirm Python + FastAPI, and which detectors are in scope | AI developer | **confirmed — Python + FastAPI. In scope and built: D1, D2, D3, D6, D7, D8, D9, D10, D11, D12, D13 (`server/aiml/bhaav_aiml/config.py::IN_SCOPE`). D4, D5 registered but permanently skip (blocked on item 7). D14 was never built** |
 | 3 | **Write `POST /simulate`** — without it there is nothing to demo the detectors on | AI developer | **confirmed — synthetic data, owned by AI developer** |
 | 4 | **Geocode the permitted recyclers** — lat/lng, ~1 hour, blocks the ranking screen | assigned: whoever owns seed data | confirm |
 | 5 | Field rates for Eco-Recycling Ltd and the Vasai valid list | — | open |
 | 6 | Record ~60 Marathi + Hindi audio clips (8 category names, digits 0–9, "rupees", "kilo", "correct", "wrong", ~15 screen phrases) — pre-recorded, not runtime TTS. See `SERVER.md` §1 for why `expo-speech`/OS TTS is not used | assigned: design/frontend owner | confirm |
 | 7 | Populate `category.expected_qty_min/max` from field data — was blocking D4/D5, now **not blocking** since D4/D5 are out of scope for this build | — | open, lower priority |
 | 8 | Email JNARDDC, Nagpur with three specific questions — a quotable reply outranks any feature | — | open |
-| 9 | **Add `handover.inspected_condition` and `handover.downgrade_reason_code`** to `DB.md` §3.7 — D9 cannot run without them | — | open, blocks D9 |
+| 9 | **Add `handover.inspected_condition` and `handover.downgrade_reason_code`** to `DB.md` §3.7 — D9 cannot run without them | — | **done** — both columns exist, plus `collector_protest`; D9–D13 all built and running |
 
 **Items 4 and 6 have an assumed owner, not a confirmed one** — assigned here so nothing enters the build with no name on it. Correct either before `/clear` if wrong; after that this table is what the next session trusts.
 

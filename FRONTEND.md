@@ -99,7 +99,7 @@ Then a large numeric keypad. The entered number is **spoken back** after each ch
 
 Colour supports the pictogram, never replaces it — the word and the shape both carry the meaning.
 
-Condition adjusts the estimate through a documented multiplier (`condition_factor` in `DB.md`, default 1.0 / 0.85 / 0.70) and is printed on the handover record, so both parties saw the same declaration before the price was agreed. It also feeds detector D5: a lot declared `POOR` that fetches a `GOOD` price is a signal worth a flag.
+Condition adjusts the estimate through a documented multiplier (`condition_factor` in `DB.md`, default 1.0 / 0.85 / 0.70) and is printed on the handover record, so both parties saw the same declaration before the price was agreed. It was designed to feed detector D5 (value density), which is permanently out of scope for this build (`AI.md` §5, §7) — what it actually feeds is `handover.inspected_condition` at the counter, which is what D9–D13 compare it against.
 
 > These multipliers are **stated assumptions, not measurements.** They live in a table so the first field visit can replace them.
 
@@ -126,7 +126,7 @@ The single most important screen in the app. It appears **instantly and offline*
 Each row shows: name, value at *their* rate, distance, an **authorised** badge, whether they accept this material, and pickup availability.
 
 - **Ranked on rate and distance together, not proximity.** The recommended row carries a marker and the words **सुचवलेले** (recommended).
-- **Only recyclers with a currently valid authorisation appear.** Of the 161 entries on the MPCB published list, **87 have lapsed and only 74 are current** — the app never routes a collector to a lapsed one.
+- **Only recyclers with a currently valid authorisation appear.** Of the 161 entries on the MPCB published list, **87 have lapsed and only 74 are current** — the app never routes a collector to a lapsed one. A tick alone would be decorative, since the list is already pre-filtered; the **`AuthorisationPanel`** component renders the live listed/valid/lapsed/hidden counts from `GET /public/authorisation`, plus the MPCB source and its `fetchedOn` date, so the filtering itself is the demonstrable thing, not a per-row checkmark. Each row also carries a **`RecyclerAuthBadge`** showing the MPCB registration number and validity date behind the tick. Both cache the last-fetched counts so the panel still renders offline, and both degrade to showing nothing — never an error banner — if the fetch fails.
 - A muted footer states the rate date: `भाव: २ सप्टेंबर`.
 
 ### S6 · Accept
@@ -193,6 +193,7 @@ The console's primary screen. A table of material categories with an editable ra
 - Rate changes are **append-only** — a new row with a timestamp, never an overwrite. The history is the price dataset.
 - Shows when each rate was last updated, and flags any rate untouched for over 7 days.
 - A "copy yesterday's rates" action, because most days nothing changes.
+- Also carries the console's own `AuthorisationPanel` — same live listed/valid/lapsed/hidden counts as the app's S5, sourced from `GET /public/authorisation`. Copy is honesty-guarded per `README.md` ground rule 1: a lapsed listing is never phrased as illegal or unauthorised, only hidden from the app.
 
 ### R2 · Incoming acceptances
 
@@ -212,7 +213,7 @@ All completed handovers, filterable by date and category, with CSV export. Each 
 
 ### R5 · Flags
 
-Anomalies raised against this recycler's own transactions, with the reason stated in plain language. Visible to the recycler by design — the system is not covert.
+Anomalies raised against this recycler's own transactions, with the reason stated in plain language. Visible to the recycler by design — the system is not covert. Detection now fires automatically after every confirmed handover; this page also carries an operator-triggered **"Run detection"** button for the demo. `INFO`-severity flags (the great majority — D1 alone fires on roughly a third of handovers) are hidden from this default view so the list stays usable; nothing is deleted, they are simply not the default.
 
 ---
 
@@ -247,9 +248,11 @@ Build these once, reuse everywhere:
 
 ## 7. Explicitly not built
 
-User accounts and passwords · UPI or payments · push notification service · admin dashboard · in-app chat or messaging · ratings and reviews · route optimisation · map tiles or a visual map · multi-city onboarding · bidding or auctions.
+User accounts and passwords · UPI or payments · **app push notification service** (FCM/APNs — distinct from the SMS text alerts described below, which are built) · admin dashboard · in-app chat or messaging · ratings and reviews · route optimisation · map tiles or a visual map · multi-city onboarding · bidding or auctions.
 
 A **list sorted by distance is sufficient**; a visual map needs cached tiles and buys nothing at the internal round.
+
+**SMS text alerts now exist** (`SERVER.md` §6.1) and are not on this list: the recycler gets a text on acceptance, and a collector who opts in (via `collector_contact`) gets one on accept/decline. This is a plain SMS via Fast2SMS, not the app-push-notification service above, and it is off by default in every environment until `SMS_ENABLED` is set.
 
 ---
 

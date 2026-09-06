@@ -61,7 +61,7 @@ They see the whole list at once: **₹1,290 · 6.2 km · authorised · accepts P
 
 ## They choose, and the recycler is told
 
-The collector taps accept on one. That recycler gets a notification that a collector has accepted their rate.
+The collector taps accept on one. That recycler gets a notification that a collector has accepted their rate — an SMS text (Fast2SMS; off by default for the whole deployment until explicitly enabled, and carrying no detail that identifies the collector) alongside the acceptance appearing in their console.
 
 The recycler can decline. **If they do nothing, the collector simply travels as planned** — the acceptance is a heads-up, not a permission. This is what keeps the collector moving at the speed of the informal trade rather than waiting on a message, and it's what allows the whole flow to work offline: the acceptance sits in a queue on the phone and is delivered whenever connectivity returns.
 

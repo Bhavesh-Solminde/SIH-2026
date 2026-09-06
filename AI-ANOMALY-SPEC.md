@@ -2,16 +2,19 @@
 
 **Companion to [`AI.md`](AI.md). Written for the AI developer who owns `server/aiml`.**
 
-`AI.md` §5 defines detectors **D1–D8** and §11 defines the service contract. This document
-does not replace either. It adds:
+`AI.md` §5 originally defined detectors **D1–D8**; it now also carries D9–D13, added by this
+document and folded back in once built. §11 defines the service contract. This document does
+not replace either. It adds:
 
 - two decisions that must be settled **before any code is written**,
 - eleven gaps found in the current specification, with fixes,
 - what actually happens *after* a detection — the workflow, not the model,
-- **D9–D14**, covering an adversarial recycler that D1–D8 cannot catch,
+- **D9–D13**, covering an adversarial recycler that D1–D8 cannot catch, plus **D14** as a stretch goal that was never built,
 - the monopsony / no-alternative-buyer case,
 - `POST /simulate` extensions needed to demonstrate any of it,
 - an edge-case register.
+
+> **Status as built:** D9–D13 are implemented and in `server/aiml/bhaav_aiml/config.py::IN_SCOPE` (`server/aiml/bhaav_aiml/detectors/grading.py`). D14 (§6.3, evidence-photo reuse) remains a stretch goal that was never built. `bhaav_aiml/evaluate.py` now exists — recall, precision, an alert-budget check, and a flag-everyone baseline (§9 below) — run against the simulator's five recycler archetypes, with a dated rate series (§8) so D3, D10 and D12 are actually reachable.
 
 Notation follows `AI.md` §5 throughout: `P_est` = the estimate the collector saw,
 `P_pub` = published rate frozen at acceptance, `P_final` = amount actually paid and
@@ -210,7 +213,8 @@ Every column matches. D2, the strongest detector in the set, flags both identica
 
 **The conclusion is forced: every signal the recycler authors is worthless here.** The reason
 code, the photo, the inspected condition — the recycler writes all of them. Nothing about the
-evidence is even falsified. D9–D14 use only data the recycler cannot author.
+evidence is even falsified. D9–D13 (built) and D14 (stretch, unbuilt) all use only data the
+recycler cannot author.
 
 ---
 
@@ -305,11 +309,15 @@ unidentifiable.**
 
 ### 6.3 D10–D12 — detectors that need no second recycler
 
-**D10 — Downgrade change-point.** *Subject: `RECYCLER`. Min data: ≥60 days, ≥20 handovers.*
-A recycler at a 15% downgrade rate for four months that jumps to 85% did not experience a
-change in material — it experienced a change in policy. Compare the trailing 30-day rate
-against the preceding 90-day rate. `WARN` above a 3× step. **Blind to anyone who lied from
-day one.**
+**D10 — Downgrade change-point.** *Subject: `RECYCLER`. Min data: ≥60 days, ≥20 handovers,
+≥8 per window.* **As built** (`bhaav_aiml/detectors/grading.py::d10_downgrade_change_point`),
+the split is **per-recycler at the midpoint of that recycler's own dated handover history**,
+not a fixed trailing-30/preceding-90-day window — a fixed global window would read a late
+joiner's entire history as one window. The threshold is an **absolute rise in downgrade rate**
+(`step ≥ 0.30`, since a rate is bounded at 1.0 and a multiplier like "3×" can never fire off a
+low base rate — an earlier config value of `3.0` was exactly this bug and was corrected to
+`0.30`), not a 3× multiplier. `WARN` above the step. **Blind to anyone who lied from
+day one** — their rate never steps because it was always high.
 
 **D11 — Cross-category downgrade uniformity.** *Subject: `RECYCLER`. Min data: ≥3 categories,
 ≥10 handovers each.* A source yielding genuinely poor PCB does not thereby yield poor copper
@@ -444,7 +452,9 @@ the D9 separation cannot be scored.
 
 ## 9. Evaluation
 
-Per `AI.md` §8, plus:
+**Implemented** in `bhaav_aiml/evaluate.py` (`evaluate()`, `baseline_flag_everyone()`,
+`eval_report()`, `GUILTY_PROFILES`), exercised against the simulator's adversarial recycler
+archetypes. Per `AI.md` §8, plus:
 
 1. **Recall per detector** on injected anomalies, at a fixed seed.
 2. **Alert budget: ≤5% of transactions flagged.** Report the flag rate alongside recall. A
@@ -520,18 +530,31 @@ here is what we do instead."*
 
 ## 12. Build order for `server/aiml`
 
-1. **Answer §0.1** — rules or Isolation Forest. Nothing starts until this is settled.
-2. **Get §0.2 into `DB.md`** — three columns on `handover`, plus the `/detect` request body.
-3. **`POST /simulate`** with `seed` and the five recycler profiles (§8). Open item 3, and it
-   depends on the `/detect` contract being frozen first — that is open item 1.
-4. **D1, D6, D7, D8** — no history needed, they work on the first transaction.
-5. **D2, D3** — the two to lead with, per `AI.md` §5.
-6. **D9 + D13** — the separation demo. This is the strongest thing in the build.
-7. **D10, D11, D12** — the zero-overlap set.
-8. **D4, D5** — blocked on real weight distributions, open item 7.
-9. **D14** — stretch, only if everything else is done.
+> **Status: steps 1–7 are done.** D1–D3 and D6–D13 are implemented, and the simulator now
+> emits a dated rate series so D3/D10/D12 have something to be reachable on (§8). D4, D5 remain
+> permanently out of scope (step 8); D14 remains a stretch goal, never built (step 9).
 
-**Stop after 6 and you still have the best demo in the room.**
+1. ~~**Answer §0.1**~~ — done. Rules, not Isolation Forest — see `AI.md` §11's contract and §12's
+   note on the *separate* `sihmodel.vercel.app` price model, which is a different open question.
+2. ~~**Get §0.2 into `DB.md`**~~ — done. `inspected_condition`, `downgrade_reason_code` and
+   `collector_protest` are columns on `handover` (`DB.md` §3.7).
+3. ~~**`POST /simulate`**~~ — done, with `seed` and the five recycler profiles (§8), plus a dated
+   rate series per recycler/category.
+4. ~~**D1, D6, D7, D8**~~ — done, work on the first transaction.
+5. ~~**D2, D3**~~ — done, the two to lead with, per `AI.md` §5.
+6. ~~**D9 + D13**~~ — done. The separation demo. `bhaav_aiml/evaluate.py` confirms it: on the
+   adversarial simulated corpus, recall 1.0 and precision 1.0 across the three planted bad
+   actors (`systematic_liar`, `late_onset_liar`, `monopolist`), zero false positives.
+7. ~~**D10, D11, D12**~~ — done, the zero-overlap set.
+8. **D4, D5** — still blocked on real weight distributions, open item 7. Permanently out of
+   scope for this build, not merely deferred.
+9. **D14** — stretch, never built. Not started.
+
+**All eleven in-scope detectors ship.** The raw alert rate before the console's presentation
+filter is 0.52 against the 0.05 budget — expected, not a bug: D1 alone fires on roughly a third
+of handovers, which is why `GET /recycler/flags` excludes `INFO` severity by default
+(`?includeInfo=1` returns all). The budget is enforced at the presentation boundary, not by
+raising D1's threshold.
 
 ---
 
