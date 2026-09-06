@@ -8,15 +8,22 @@
  *
  * Response shape per item:
  *   { recyclerId, recyclerName, lat, lng, authorizationStatus,
- *     materialsAccepted, serviceAreaKm,
+ *     materialsAccepted, serviceAreaKm, pickupAvailable, address,
  *     categoryCode, categoryNameEn, categoryNameMr,
  *     price, unit, validFrom }
  */
 
 import { Router } from "express";
 import { prisma } from "../db.js";
-import { log } from "../lib/logger.js";
-import { uuidv7 } from "@bhaav/core/ids";
+import { log, logger } from "../lib/logger.js";
+import { uuidv7, referenceCodeFromUuid } from "@bhaav/core/ids";
+import { MPCB_SOURCE, sourceAgeDays } from "../lib/mpcbSource.js";
+import { sendSms, smsEnabled } from "../lib/sms.js";
+
+// The pre-built `log` export has no `public` or `sms` namespace — same
+// situation lib/sms.js documents for itself. Use the generic factory rather
+// than inventing a key on the shared object.
+const smsLog = logger("sms");
 
 export const publicRouter = Router();
 
@@ -55,6 +62,14 @@ publicRouter.get("/rates", async (req, res, next) => {
             authorizationStatus: true,
             materialsAccepted: true,
             serviceAreaKm: true,
+            // A field absent from this select reads as undefined in the
+            // projection below and ships as null — silently, with no error.
+            // pickupAvailable in particular feeds a ranking weight, so a
+            // missing select here quietly zeroes that whole term.
+            pickupAvailable: true,
+            address: true,
+            registrationNo: true,
+            validityTo: true,
           },
         },
       },
@@ -79,6 +94,12 @@ publicRouter.get("/rates", async (req, res, next) => {
       authorizationStatus: r.recycler?.authorizationStatus ?? "VALID",
       materialsAccepted: r.recycler?.materialsAccepted ?? [],
       serviceAreaKm:     r.recycler?.serviceAreaKm ?? 25,
+      pickupAvailable:   r.recycler?.pickupAvailable === true,
+      address:           r.recycler?.address ?? null,
+      // Checkable evidence, not a decorative tick: the MPCB registration this
+      // authorisation rests on, and the date it runs out.
+      registrationNo:    r.recycler?.registrationNo ?? null,
+      validityTo:        r.recycler?.validityTo ?? null,
       categoryCode:      categoryById[r.categoryId]?.code ?? null,
       categoryNameEn:    categoryById[r.categoryId]?.nameEn ?? null,
       categoryNameMr:    categoryById[r.categoryId]?.nameMr ?? null,
@@ -106,6 +127,41 @@ publicRouter.get("/rates", async (req, res, next) => {
 //         sourceType?, recyclerId, acceptedRate, deviceId,
 //         estimatedValue, collectionTs? }
 // ---------------------------------------------------------------------------
+/**
+ * GET /public/authorisation
+ *
+ * The filtering, made visible. Every recycler the app shows is authorised, so a
+ * tick on each one carries no information — what a judge (or a collector) can
+ * actually check is how many were excluded and why. Counts are computed live
+ * from the same table the ranking gates on, so this can never drift from the
+ * behaviour it describes.
+ */
+publicRouter.get("/authorisation", async (_req, res, next) => {
+  try {
+    const grouped = await prisma.recycler.groupBy({
+      by: ["authorizationStatus"],
+      _count: { _all: true },
+    });
+    const counts = Object.fromEntries(grouped.map((g) => [g.authorizationStatus, g._count._all]));
+    const valid = counts.VALID ?? 0;
+    const lapsed = counts.LAPSED_IN_LIST ?? 0;
+    const listed = grouped.reduce((n, g) => n + g._count._all, 0);
+
+    return res.json({
+      listed,
+      valid,
+      lapsed,
+      shownInApp: valid,
+      hiddenFromApp: listed - valid,
+      source: MPCB_SOURCE,
+      sourceAgeDays: sourceAgeDays(),
+    });
+  } catch (err) {
+    log.recycler.error("GET /public/authorisation error", err);
+    return next(err);
+  }
+});
+
 publicRouter.post("/lots", async (req, res, next) => {
   try {
     const {
@@ -167,6 +223,28 @@ publicRouter.post("/lots", async (req, res, next) => {
     });
 
     log.req.info("POST /public/lots", { lotId, deviceId, categoryCode });
+
+    // Fire-and-forget recycler notification, fired AFTER the transaction has
+    // committed — same fail-open rule as scoreHandover/runDetection in
+    // handover.js. A Fast2SMS outage or timeout must never cost a collector
+    // their recorded lot, and a slow third-party HTTP call must never hold
+    // the transaction open. No collector identity travels in the message:
+    // only category, quantity, and an opaque reference code derived from the
+    // lot id (never the collector id or device id) — the project's ground
+    // rule is a pseudonymous collector.
+    if (smsEnabled() && recycler.phone) {
+      const message =
+        `Bhaav: new acceptance. ${category.code} ${quantity}${String(unit).toLowerCase()}, ` +
+        `ref ${referenceCodeFromUuid(lotId)}. Collector arriving. Open console to respond.`;
+      void sendSms({ numbers: recycler.phone, message })
+        .then((result) => {
+          if (!result.ok) smsLog.warn("recycler notify not sent", { lotId, reason: result.reason });
+        })
+        .catch((err) => {
+          smsLog.warn("recycler notify failed", { lotId, reason: err?.message });
+        });
+    }
+
     return res.status(201).json({ lotId, deviceId });
   } catch (err) {
     log.req.error("POST /public/lots error", err);
