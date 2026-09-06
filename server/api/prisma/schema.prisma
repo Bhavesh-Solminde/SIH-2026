@@ -18,9 +18,29 @@ model Collector {
   operatingArea     String?  @map("operating_area")
   createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  lots Lot[]
+  lots    Lot[]
+  contact CollectorContact?
 
   @@map("collector")
+}
+
+// The collector's number lives HERE, not on `collector`, on purpose. DB.md 3.1
+// argues that the collector table's four columns are themselves the DPDP
+// answer; a nullable phone there would cost that argument. A separate table
+// keeps it true, gives consent_ts somewhere to live, and makes erasure a single
+// DELETE that can be demonstrated live.
+//
+// Strictly optional. The app must behave identically when no row exists —
+// README ground rule 7 permits an optional phone, never a mandatory one.
+model CollectorContact {
+  collectorId String   @id @map("collector_id") @db.Uuid
+  phone       String
+  consentTs   DateTime @map("consent_ts") @db.Timestamptz(6)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  collector Collector @relation(fields: [collectorId], references: [id], onDelete: Cascade)
+
+  @@map("collector_contact")
 }
 
 // DB.md 3.2 — seeded from mpcb_recyclers.csv. The API only ever returns VALID.

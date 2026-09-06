@@ -308,3 +308,70 @@ publicRouter.get("/lots", async (req, res, next) => {
     return next(err);
   }
 });
+
+// ---------------------------------------------------------------------------
+// POST /public/collector/:id/contact — no auth
+//
+// Optional opt-in: a collector may choose to leave a phone number so the app
+// can relay a recycler's accept/decline as an SMS. README ground rule 7
+// permits an optional phone, never a mandatory one — this endpoint is the
+// only place a number is ever collected, and it lives in its own table
+// (collector_contact), never on `collector` itself. See DB.md 3.1 and the
+// CollectorContact model comment in schema.prisma.
+//
+// The collector row is upserted the same lazy way POST /public/lots does it:
+// a collector may opt in before ever submitting a lot.
+// ---------------------------------------------------------------------------
+const PHONE_RE = /^\d{10}$/;
+
+publicRouter.post("/collector/:id/contact", async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { phone } = req.body ?? {};
+
+    if (typeof phone !== "string" || !PHONE_RE.test(phone)) {
+      return res.status(400).json({ error: "phone_must_be_ten_digits" });
+    }
+
+    const now = new Date();
+    await prisma.$transaction(async (tx) => {
+      await tx.collector.upsert({
+        where: { id },
+        update: {},
+        create: { id, preferredLanguage: "mr", operatingArea: null },
+      });
+
+      await tx.collectorContact.upsert({
+        where: { collectorId: id },
+        update: { phone, consentTs: now },
+        create: { collectorId: id, phone, consentTs: now },
+      });
+    });
+
+    log.req.info("POST /public/collector/:id/contact", { collectorId: id.slice(0, 8) });
+    return res.status(201).json({ ok: true });
+  } catch (err) {
+    log.req.error("POST /public/collector/:id/contact error", err);
+    return next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /public/collector/:id/contact — no auth
+//
+// The DPDP erasure right, in one statement. Idempotent by design: deleting a
+// number that was never given — or a collector id that never existed — must
+// succeed, never 404. This is a right, not a lookup, and it must never fail
+// noisily.
+// ---------------------------------------------------------------------------
+publicRouter.delete("/collector/:id/contact", async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    await prisma.collectorContact.deleteMany({ where: { collectorId: id } });
+    log.req.info("DELETE /public/collector/:id/contact", { collectorId: id.slice(0, 8) });
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    log.req.error("DELETE /public/collector/:id/contact error", err);
+    return next(err);
+  }
+});

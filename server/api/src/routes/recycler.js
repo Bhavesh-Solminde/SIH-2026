@@ -1,8 +1,13 @@
 import { Router } from "express";
 import { prisma } from "../db.js";
 import { requireSession } from "../middleware/requireSession.js";
-import { log } from "../lib/logger.js";
+import { log, logger } from "../lib/logger.js";
 import { referenceCodeFromUuid } from "@bhaav/core/ids";
+import { sendSms, smsEnabled } from "../lib/sms.js";
+
+// The pre-built `log` export has no `sms` namespace — same situation
+// lib/sms.js and routes/public.js document for themselves.
+const smsLog = logger("sms");
 
 export const recyclerRouter = Router();
 
@@ -183,7 +188,12 @@ recyclerRouter.post("/acceptances/:id/respond", async (req, res, next) => {
         .json({ error: "action_must_be_ACCEPT_or_REJECT" });
     }
 
-    const existing = await prisma.acceptance.findUnique({ where: { id } });
+    const existing = await prisma.acceptance.findUnique({
+      where: { id },
+      include: {
+        lot: { include: { category: { select: { code: true } } } },
+      },
+    });
     if (!existing) {
       return res.status(404).json({ error: "not_found" });
     }
@@ -199,6 +209,31 @@ recyclerRouter.post("/acceptances/:id/respond", async (req, res, next) => {
       where: { id },
       data: { recyclerResponse: response, responseTs: new Date() },
     });
+
+    // Collector notification. Optional by construction: no contact row, no
+    // message, no behaviour change — README ground rule 7 permits an
+    // optional phone, never a mandatory one. The contact lookup is a local
+    // DB read and is awaited; the outbound Fast2SMS call is the third-party
+    // network hop, and THAT is fired after the update commits and never
+    // awaited — a Fast2SMS outage or timeout must never cost a recycler
+    // their recorded response.
+    if (smsEnabled()) {
+      const lot = existing.lot;
+      const contact = await prisma.collectorContact.findUnique({ where: { collectorId: lot.collectorId } });
+      if (contact) {
+        const referenceCode = referenceCodeFromUuid(lot.id);
+        const message = canonical === "ACCEPT"
+          ? `Bhaav: ${req.recycler.name} confirmed your lot. ${lot.category?.code ?? ""} ${Number(lot.quantity)}${String(lot.unit).toLowerCase()}, ref ${referenceCode}. They are expecting you.`
+          : `Bhaav: ${req.recycler.name} declined lot ${referenceCode}. Open the app to pick another recycler.`;
+        void sendSms({ numbers: contact.phone, message })
+          .then((result) => {
+            if (!result.ok) smsLog.warn("collector notify not sent", { acceptanceId: id, reason: result.reason });
+          })
+          .catch((err) => {
+            smsLog.warn("collector notify failed", { acceptanceId: id, reason: err?.message });
+          });
+      }
+    }
 
     return res.json({
       id: updated.id,
