@@ -167,6 +167,11 @@ model Handover {
   inspectedCondition   String?   @map("inspected_condition")
   downgradeReasonCode  String?   @map("downgrade_reason_code")
   collectorProtest     Boolean   @default(false) @map("collector_protest")
+  referencePriceSnapshot Decimal?  @map("reference_price_snapshot") @db.Decimal(12, 2)
+  referencePriceUnit     String?   @map("reference_price_unit")
+  referencePriceStatus   String?   @map("reference_price_status")
+  buyerOfferSnapshot     Decimal?  @map("buyer_offer_snapshot") @db.Decimal(12, 2)
+  buyerOfferUnit         String?   @map("buyer_offer_unit")
   handoverLat          Float?    @map("handover_lat")
   handoverLng          Float?    @map("handover_lng")
   handoverTs           DateTime  @map("handover_ts") @db.Timestamptz(6)
@@ -247,4 +252,40 @@ model RecyclerSession {
 
   @@index([accountId])
   @@map("recycler_session")
+}
+
+model MetalMandiReferencePrice {
+  id                String   @id @default(cuid())
+  referenceId       String   @unique @map("reference_id")
+  category          String
+  item              String
+  specification     String?
+  unit              String
+  referencePrice    Decimal  @map("reference_price") @db.Decimal(12, 2)
+  priceChangePct    Decimal? @map("price_change_pct") @db.Decimal(8, 2)
+  criticalMaterials String[] @default([]) @map("critical_materials")
+  importedAt        DateTime @default(now()) @map("imported_at")
+
+  categoryMappings CategoryReferencePrice[]
+
+  @@index([category])
+  @@map("metal_mandi_reference_price")
+}
+
+model CategoryReferencePrice {
+  id                    String   @id @default(cuid())
+  categoryCode          String   @unique @map("category_code")
+  status                String
+  unit                  String
+  price                 Decimal? @db.Decimal(12, 2)
+
+  resolvedRefId         String?  @map("resolved_ref_id")
+  candidateSourceRefIds String[] @default([]) @map("candidate_source_ref_ids")
+
+  notes                 String?
+
+  resolvedSource MetalMandiReferencePrice? @relation(fields: [resolvedRefId], references: [referenceId])
+
+  @@index([resolvedRefId])
+  @@map("category_reference_price")
 }

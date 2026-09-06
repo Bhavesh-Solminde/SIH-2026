@@ -9,7 +9,8 @@ import { log } from "./logger.js";
  * FAIL-OPEN: errors return { ok: false } — caller must not block transactions.
  */
 export async function callPredict(payload, { url, timeoutMs } = {}) {
-  const base = url ?? process.env.AIML_URL ?? "https://sihmodel.vercel.app";
+  const configuredUrl = url ?? process.env.AIML_URL ?? "https://sihmodel.vercel.app";
+  const base = configuredUrl.replace(/\/+$/, "").replace(/\/predict$/, "");
   const ms = Number(timeoutMs ?? process.env.AIML_TIMEOUT_MS ?? 4000);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
