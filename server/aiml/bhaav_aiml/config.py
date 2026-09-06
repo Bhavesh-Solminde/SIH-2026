@@ -30,10 +30,14 @@ THRESHOLDS = {
     "D9_bias_critical": 0.60,
     "D9_min_shared_collectors": 10,
     "D9_critical_min_n": 20,
-    # D10 downgrade change-point.
-    "D10_step": 3.0,
+    # D10 downgrade change-point. A recycler at a low downgrade rate for months
+    # that jumps did not experience a change in material — it experienced a
+    # change in policy. `step` is the absolute rise in downgrade RATE (0..1)
+    # between the preceding and trailing windows, not a multiplier.
+    "D10_step": 0.30,
     "D10_min_days": 60,
     "D10_min_handovers": 20,
+    "D10_min_per_window": 8,
     # D11 cross-category downgrade uniformity.
     "D11_min_categories": 3,
     "D11_min_per_category": 10,

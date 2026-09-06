@@ -1,6 +1,9 @@
 from bhaav_aiml.models import Context
 from bhaav_aiml.config import THRESHOLDS
-from bhaav_aiml.detectors.grading import d9_grader_bias, d13_single_buyer_market, grader_bias
+from bhaav_aiml.detectors.grading import (
+    d9_grader_bias, d10_downgrade_change_point, d13_single_buyer_market, grader_bias,
+)
+from bhaav_aiml.simulate import simulate
 
 GRADE = {"GOOD": 3, "FAIR": 2, "POOR": 1}
 
@@ -92,3 +95,47 @@ def test_d13_flags_a_single_buyer_district():
     assert len(flags) == 1
     assert flags[0].subject_type == "MARKET"
     assert flags[0].subject_id == "district:Buldhana"
+
+
+def test_d10_flags_a_recycler_whose_downgrade_rate_steps_up():
+    """late_onset_liar is honest for the first half then switches. That is a
+    change in policy, not a change in material, and D10 is the detector built
+    for exactly that profile."""
+    # ground_truth lives on the simulate() body, not on Context — Context
+    # deliberately carries only what a detector may read.
+    body = simulate({
+        "seed": 5, "days": 180, "n_lots": 400, "n_collectors": 12, "n_recyclers": 3,
+        "recycler_profiles": {"late_onset_liar": 1, "honest": 2},
+    })
+    ctx = Context.from_request(body)
+    liar = next(g["recycler_id"] for g in body["ground_truth"]
+                if g.get("profile") == "late_onset_liar")
+
+    flags, skipped = d10_downgrade_change_point(ctx, THRESHOLDS)
+
+    assert liar in [f.subject_id for f in flags]
+
+
+def test_d10_leaves_a_consistently_honest_recycler_alone():
+    ctx = Context.from_request(simulate({
+        "seed": 5, "days": 180, "n_lots": 400, "n_collectors": 12, "n_recyclers": 3,
+        "recycler_profiles": {"honest": 3},
+    }))
+
+    flags, skipped = d10_downgrade_change_point(ctx, THRESHOLDS)
+
+    assert flags == []
+
+
+def test_d10_skips_with_a_reason_when_history_is_too_short():
+    """Skip-with-reason, never a silent empty result: an operator must be able
+    to tell 'nothing wrong' from 'could not run'."""
+    ctx = Context.from_request(simulate({
+        "seed": 5, "days": 10, "n_lots": 20, "n_recyclers": 2,
+    }))
+
+    flags, skipped = d10_downgrade_change_point(ctx, THRESHOLDS)
+
+    assert flags == []
+    assert skipped is not None
+    assert "history" in skipped.reason.lower() or "handover" in skipped.reason.lower()

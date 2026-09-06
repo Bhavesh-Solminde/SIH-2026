@@ -4,6 +4,7 @@ graded differently by different recyclers. D10-D12 cover the zero-overlap case,
 and D13 flags a single-buyer market rather than a person."""
 
 from __future__ import annotations
+from datetime import datetime
 from bhaav_aiml.models import Context, Flag, Skip
 
 GRADE = {"GOOD": 3, "FAIR": 2, "POOR": 1}
@@ -101,13 +102,67 @@ def d9_grader_bias(ctx: Context, th) -> tuple[list[Flag], Skip | None]:
 
 def d10_downgrade_change_point(ctx: Context, th) -> tuple[list[Flag], Skip | None]:
     """A recycler at a low downgrade rate for months that jumps did not
-    experience a change in material — it experienced a change in policy. Needs
-    handover timestamps; skips if history is thin.
+    experience a change in material — it experienced a change in policy.
 
-    D10 is blind to anyone who lied from day one; D11 and D12 cover that case.
-    Skeleton skips with a reason until dated history from the simulator
-    provides the trailing-30 vs preceding-90 series it needs."""
-    return [], Skip("D10", "insufficient dated history for a change-point test")
+    Splits each recycler's dated handovers at the midpoint of their own active
+    window and compares downgrade rates either side. The split is per-recycler
+    rather than global because recyclers join at different times, and a global
+    midpoint would read a late joiner's whole history as one window.
+
+    D10 is blind to anyone who lied from day one — their rate never steps
+    because it was always high. D11 and D12 cover that case.
+    """
+    lot_by_id = ctx.lot_by_id()
+
+    by_recycler: dict[str, list[tuple[datetime, int]]] = {}
+    for h in ctx.handovers:
+        lot = lot_by_id.get(h["lot_id"])
+        if not lot or not h.get("handover_ts"):
+            continue
+        ts = datetime.fromisoformat(h["handover_ts"])
+        d = 1 if _is_downgrade(lot["condition"], h.get("inspected_condition")) else 0
+        by_recycler.setdefault(h["recycler_id"], []).append((ts, d))
+
+    flags: list[Flag] = []
+    skipped = None
+
+    for recycler_id, series in sorted(by_recycler.items()):
+        if len(series) < th["D10_min_handovers"]:
+            skipped = Skip("D10", f"insufficient dated history: {len(series)} handovers for a "
+                                  f"recycler, need {th['D10_min_handovers']}")
+            continue
+
+        series.sort(key=lambda x: x[0])
+        span_days = (series[-1][0] - series[0][0]).days
+        if span_days < th["D10_min_days"]:
+            skipped = Skip("D10", f"insufficient dated history: {span_days} days for a "
+                                  f"recycler, need {th['D10_min_days']}")
+            continue
+
+        midpoint = series[0][0] + (series[-1][0] - series[0][0]) / 2
+        preceding = [d for ts, d in series if ts < midpoint]
+        trailing = [d for ts, d in series if ts >= midpoint]
+
+        if (len(preceding) < th["D10_min_per_window"]
+                or len(trailing) < th["D10_min_per_window"]):
+            skipped = Skip("D10", "handovers too unevenly distributed to split into windows")
+            continue
+
+        prec_rate = sum(preceding) / len(preceding)
+        trail_rate = sum(trailing) / len(trailing)
+        step = trail_rate - prec_rate
+
+        if step >= th["D10_step"]:
+            flags.append(Flag("D10", "RECYCLER", recycler_id, "WARN", {
+                "trailing_rate": round(trail_rate, 4),
+                "preceding_rate": round(prec_rate, 4),
+                "step": round(step, 4),
+                "n_trailing": len(trailing),
+                "n_preceding": len(preceding),
+                "threshold": th["D10_step"],
+            }))
+
+    return flags, skipped
 
 
 def d11_cross_category_uniformity(ctx: Context, th) -> tuple[list[Flag], Skip | None]:
