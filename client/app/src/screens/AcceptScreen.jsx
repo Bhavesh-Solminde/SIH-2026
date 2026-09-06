@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Linking, Share, Platform, Alert } from 'react-native';
 import { Screen } from '../ui/Screen';
 import { Text } from '../ui/Text';
 import { Button } from '../ui/Button';
@@ -13,6 +13,7 @@ import { createAcceptance } from '../db/repos/acceptances';
 import { uuidv7 } from '@bhaav/core/ids';
 import { getDeviceId } from '../lib/deviceId';
 import { log } from '../lib/logger';
+import { webDirectionsUrl, nativeDirectionsUrl, shareMessage, hasLocation } from '../lib/directions';
 
 /**
  * S6 — Accept
@@ -26,6 +27,33 @@ export default function AcceptScreen({ navigation, route, db, apiUrl }) {
       speak(t('accept_label'));
     }, [speak, t])
   );
+
+  // Prefer the native maps app; fall back to the Google Maps web link, which
+  // resolves in any browser. A device with neither is told plainly rather than
+  // left with a button that does nothing.
+  const openDirections = useCallback(async () => {
+    if (!hasLocation(recycler)) return;
+    const native = nativeDirectionsUrl(recycler, Platform.OS);
+    const web = webDirectionsUrl(recycler);
+    try {
+      if (await Linking.canOpenURL(native)) return Linking.openURL(native);
+      return await Linking.openURL(web);
+    } catch (err) {
+      log.accept.warn('directions failed', { message: err?.message });
+      Alert.alert('नकाशा उघडता आला नाही', web);
+    }
+  }, [recycler]);
+
+  // Offline-safe: the share sheet needs no network, and this trade already runs
+  // on WhatsApp, so sending the address is how a location actually travels.
+  const shareLocation = useCallback(async () => {
+    if (!hasLocation(recycler)) return;
+    try {
+      await Share.share({ message: shareMessage(recycler) });
+    } catch (err) {
+      log.accept.warn('share failed', { message: err?.message });
+    }
+  }, [recycler]);
   const {
     recycler, category, subCategory, quantity, unit, condition, sourceType,
     collectionLat, collectionLng, collectionTs, photos = [], operatingArea,
@@ -150,6 +178,13 @@ export default function AcceptScreen({ navigation, route, db, apiUrl }) {
           </Text>
         </View>
 
+        {hasLocation(recycler) && (
+          <View style={styles.travelRow}>
+            <Button title="दिशा दाखवा" onPress={openDirections} style={styles.directionsBtn} />
+            <Button title="पत्ता पाठवा" onPress={shareLocation} style={styles.shareBtn} variant="ghost" />
+          </View>
+        )}
+
         <Button
           title="मुख्यपृष्ठावर जा"
           onPress={() => navigation.navigate('Main')}
@@ -197,6 +232,7 @@ export default function AcceptScreen({ navigation, route, db, apiUrl }) {
   );
 }
 
+// styles for the travel affordances live with the rest of the sheet below
 // Helpers — in production these come from device meta/collector table
 async function getOrCreateCollectorId(db) {
   if (!db) return uuidv7();
@@ -218,6 +254,11 @@ async function resolveCategoryId(db, code) {
 }
 
 const styles = StyleSheet.create({
+  // Side by side: directions is the primary action after accepting, but share
+  // is the one that still works with no signal, so neither is buried.
+  travelRow:     { flexDirection: 'row', gap: spacing[2], marginTop: spacing[3] },
+  directionsBtn: { flex: 2 },
+  shareBtn:      { flex: 1 },
   container: { flex: 1, backgroundColor: colors.background, padding: spacing[5] },
   title: { fontWeight: '700', marginBottom: spacing[4] },
   card: {

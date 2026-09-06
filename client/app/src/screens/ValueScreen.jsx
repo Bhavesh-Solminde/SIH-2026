@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, FlatList,
-  TextInput, KeyboardAvoidingView, Platform,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { Screen } from '../ui/Screen';
 import { Text } from '../ui/Text';
@@ -21,10 +21,14 @@ import { getCachedRates, setCachedRates, isCacheStale, cacheAgeMinutes } from '.
  *
  * Flow:
  *  1. Collector sees market rate range (min–max across all recyclers)
- *  2. Collector enters their expected rate per unit
- *  3. App ranks recyclers by: closeness to expected rate + distance + staleness
- *  4. Each row shows: rate, distance, ✓ Authorised, materials accepted
- *  5. Pickup availability NOT shown (per product spec)
+ *  2. App ranks recyclers on the AI.md section 2 score — 0.55·value
+ *     − 0.30·distance + 0.10·pickup − 0.05·staleness — so a further
+ *     recycler paying more per kg can win, which is the whole promise
+ *  3. Collector can re-sort by pure value or pure distance and disagree
+ *  4. Each row shows: value, rate, distance, ✓ Authorised, materials accepted
+ *
+ * No typed input on this screen: the collector is holding the material, not
+ * negotiating with a keypad, and every extra field costs a low-literacy user.
  *
  * Data:
  *  - Tries AsyncStorage cache first (24h TTL)
@@ -66,8 +70,10 @@ export default function ValueScreen({ navigation, route, db, apiUrl }) {
 
   const [allRates, setAllRates]           = useState([]);   // raw rates from cache/API
   const [ranked, setRanked]               = useState([]);
+  // The filtering, stated. Every recycler below is authorised, so a tick on each
+  // row says nothing — the informative number is how many were withheld.
+  const [authorisation, setAuthorisation] = useState(null);
   const [sortMode, setSortMode]           = useState('score');
-  const [expectedRateStr, setExpectedRateStr] = useState(''); // collector's input
   const [marketMin, setMarketMin]         = useState(null);
   const [marketMax, setMarketMax]         = useState(null);
   const [cacheAge, setCacheAge]           = useState(null);
@@ -134,11 +140,26 @@ export default function ValueScreen({ navigation, route, db, apiUrl }) {
     })();
   }, [apiUrl, categoryCode]);
 
-  // ── Re-rank whenever rates, expectedRate or sortMode changes ──────────
+  useEffect(() => {
+    if (!apiUrl) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${apiUrl}/public/authorisation`);
+        if (!res.ok) return;
+        const body = await res.json();
+        if (!cancelled) setAuthorisation(body);
+      } catch (err) {
+        // Non-fatal: the list still works, it just goes unannotated.
+        log.value.warn('authorisation fetch failed', { message: err?.message });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [apiUrl]);
+
+  // ── Re-rank whenever rates, condition, quantity or sortMode changes ───
   useEffect(() => {
     if (allRates.length === 0) return;
-
-    const collectorExpectedRate = parseFloat(expectedRateStr) || null;
 
     // Build recycler + rate structures for rankRecyclers
     // Group rates by recyclerId
@@ -153,6 +174,8 @@ export default function ValueScreen({ navigation, route, db, apiUrl }) {
           authorizationStatus: r.authorizationStatus ?? 'VALID',
           materialsAccepted:   r.materialsAccepted ?? [],
           serviceAreaKm:       r.serviceAreaKm ?? 25,
+          pickupAvailable:     r.pickupAvailable === true,
+          address:             r.address ?? null,
         };
       }
     }
@@ -184,7 +207,6 @@ export default function ValueScreen({ navigation, route, db, apiUrl }) {
         rates,
         from: collectorFrom,
         asOf: new Date().toISOString(),
-        collectorExpectedRate,
         sortBy: sortMode,
       });
     } catch (err) {
@@ -196,16 +218,12 @@ export default function ValueScreen({ navigation, route, db, apiUrl }) {
 
     // Speak the top recycler's estimated value
     if (results.length > 0 && hasAudio) {
-      const est = results[0].estimatedValue;
+      const est = results[0].value;
       composeNumber(Math.round(est)).forEach((clip) => play(clip).catch(() => {}));
     }
 
-    log.value.info('ranked', {
-      total: results.length,
-      expectedRate: collectorExpectedRate,
-      sortMode,
-    });
-  }, [allRates, expectedRateStr, sortMode, condition, qty]);
+    log.value.info('ranked', { total: results.length, sortMode });
+  }, [allRates, sortMode, condition, qty]);
 
   const handleSelectRecycler = (rec) => {
     navigation.navigate('Accept', {
@@ -215,14 +233,19 @@ export default function ValueScreen({ navigation, route, db, apiUrl }) {
         id:             rec.recyclerId,
         name:           rec.name,
         rate:           rec.unitPrice,
-        estimatedValue: rec.estimatedValue,
+        estimatedValue: rec.value,
         distanceKm:     rec.distanceKm ?? null,
         materialsAccepted: rec.materialsAccepted,
+        // Needed by AcceptScreen to offer directions — without these the
+        // collector is told to travel 9 km and given no way to get there.
+        lat:            rec.lat ?? null,
+        lng:            rec.lng ?? null,
+        address:        rec.address ?? null,
       },
     });
   };
 
-  const topEstimate = ranked[0]?.estimatedValue ?? 0;
+  const topEstimate = ranked[0]?.value ?? 0;
 
   return (
     <KeyboardAvoidingView
@@ -240,7 +263,18 @@ export default function ValueScreen({ navigation, route, db, apiUrl }) {
           </View>
         )}
 
-        {/* ── Market rate + collector expected rate input ─────────────── */}
+        {authorisation?.listed > 0 && (
+          <View style={styles.authRow}>
+            <Text variant="sm" style={styles.authText}>
+              ✓ {authorisation.listed} पैकी {authorisation.valid} अधिकृत — {authorisation.hiddenFromApp} वगळले
+            </Text>
+            <Text variant="sm" style={styles.authSource}>
+              MPCB · {authorisation.source?.fetchedOn}
+            </Text>
+          </View>
+        )}
+
+        {/* ── Market rate range + headline estimate ───────────────────── */}
         <View style={styles.hero}>
           {/* Market rate range */}
           {marketMin != null && (
@@ -251,20 +285,6 @@ export default function ValueScreen({ navigation, route, db, apiUrl }) {
               </Text>
             </View>
           )}
-
-          {/* Collector's expected rate input */}
-          <View style={styles.expectedRow}>
-            <Text variant="sm" style={styles.expectedLabel}>तुमचा अपेक्षित दर (₹/{unit === 'KG' ? 'किलो' : 'नग'}):</Text>
-            <TextInput
-              style={styles.expectedInput}
-              keyboardType="numeric"
-              placeholder={marketMin ? `${marketMin}` : '0'}
-              placeholderTextColor={colors.textDisabled}
-              value={expectedRateStr}
-              onChangeText={setExpectedRateStr}
-              returnKeyType="done"
-            />
-          </View>
 
           {/* Estimated value (based on top ranked recycler) */}
           <Text variant="3xl" style={styles.heroValue}>
@@ -324,7 +344,7 @@ export default function ValueScreen({ navigation, route, db, apiUrl }) {
                       {item.name}
                     </Text>
                     <Text variant="xl" style={styles.recyclerValue}>
-                      ₹{Math.round(item.estimatedValue).toLocaleString('en-IN')}
+                      ₹{Math.round(item.value).toLocaleString('en-IN')}
                     </Text>
                   </View>
 
@@ -378,18 +398,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primarySurface, padding: spacing[4],
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
+  authRow:       { flexDirection: 'row', justifyContent: 'space-between',
+                   alignItems: 'center', marginBottom: spacing[2] },
+  authText:      { color: colors.primary, fontWeight: '700' },
+  authSource:    { color: colors.textSecondary },
+
   marketRow:     { flexDirection: 'row', alignItems: 'center', gap: spacing[2], marginBottom: spacing[2] },
   marketLabel:   { color: colors.textSecondary },
   marketRange:   { color: colors.primary, fontWeight: '700' },
-
-  expectedRow:   { flexDirection: 'row', alignItems: 'center', gap: spacing[2], marginBottom: spacing[3] },
-  expectedLabel: { color: colors.textSecondary, flex: 1 },
-  expectedInput: {
-    borderWidth: 1, borderColor: colors.border, borderRadius: 8,
-    paddingHorizontal: spacing[3], paddingVertical: spacing[1],
-    minWidth: 90, backgroundColor: colors.surface,
-    color: colors.text, fontSize: 16, fontWeight: '700', textAlign: 'right',
-  },
 
   heroValue:   { fontWeight: '800', color: colors.primary, textAlign: 'center', marginTop: spacing[1] },
   heroSub:     { color: colors.textSecondary, textAlign: 'center', marginTop: spacing[1] },
