@@ -1,5 +1,6 @@
 import { RANKING_WEIGHTS, STALENESS_NORM_DAYS } from "./constants.js";
 import { haversineKm } from "./geo.js";
+import { conditionFactorFor } from "./pricing.js";
 
 const DAY_MS = 86_400_000;
 
@@ -91,7 +92,7 @@ export function rankRecyclers({
 
     const unitPrice = Number(rate.price);
     const qty = lot.quantity ?? 0;
-    const conditionFactor = { GOOD: 1.0, FAIR: 0.85, POOR: 0.70 }[lot.condition] ?? 1.0;
+    const conditionFactor = conditionFactorFor(lot.condition);
     const value = qty * unitPrice * conditionFactor;
 
     const stalenessDays = Math.max(

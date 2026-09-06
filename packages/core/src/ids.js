@@ -1,8 +1,9 @@
 // React Native compatible UUIDv7 + reference code generator.
 // Uses Math.random() instead of node:crypto — works in both RN and Node.
-// For the server-side (API), node:crypto-based randomness is used via the
-// server's own copy of this logic. The device only needs collision-avoidance,
-// not cryptographic randomness, for ID generation.
+// The server (API) imports this same module (@bhaav/core/ids) rather than
+// keeping its own copy, so it also runs the Math.random() fallback path.
+// That's fine: only collision-avoidance is needed for ID generation, not
+// cryptographic randomness.
 
 const ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"; // Crockford Base32
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
