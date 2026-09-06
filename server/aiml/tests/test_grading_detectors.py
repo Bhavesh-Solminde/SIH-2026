@@ -1,7 +1,8 @@
 from bhaav_aiml.models import Context
 from bhaav_aiml.config import THRESHOLDS
 from bhaav_aiml.detectors.grading import (
-    d9_grader_bias, d10_downgrade_change_point, d13_single_buyer_market, grader_bias,
+    d9_grader_bias, d10_downgrade_change_point, d12_offers_never_learn,
+    d13_single_buyer_market, grader_bias,
 )
 from bhaav_aiml.simulate import simulate
 
@@ -139,3 +140,45 @@ def test_d10_skips_with_a_reason_when_history_is_too_short():
     assert flags == []
     assert skipped is not None
     assert "history" in skipped.reason.lower() or "handover" in skipped.reason.lower()
+
+
+def test_d12_flags_a_liar_who_keeps_publishing_high_while_paying_low():
+    body = simulate({
+        "seed": 13, "days": 150, "n_lots": 400, "n_collectors": 12, "n_recyclers": 3,
+        "recycler_profiles": {"systematic_liar": 1, "honest": 2},
+    })
+    ctx = Context.from_request(body)
+    liar = next(g["recycler_id"] for g in body["ground_truth"]
+                if g.get("profile") == "systematic_liar")
+
+    flags, skipped = d12_offers_never_learn(ctx, THRESHOLDS)
+
+    assert liar in [f.subject_id for f in flags]
+
+
+def test_d12_exonerates_the_honest_low_grade_recycler_who_lowers_their_rate():
+    """The separating equilibrium: declaring what you are is cheap for an honest
+    recycler and impossible for a liar, because the high rate is what wins the
+    lot. D12 must not punish the declaration."""
+    body = simulate({
+        "seed": 13, "days": 150, "n_lots": 400, "n_collectors": 12, "n_recyclers": 3,
+        "recycler_profiles": {"honest_low_grade": 1, "honest": 2},
+    })
+    ctx = Context.from_request(body)
+    honest_low = next(g["recycler_id"] for g in body["ground_truth"]
+                      if g.get("profile") == "honest_low_grade")
+
+    flags, skipped = d12_offers_never_learn(ctx, THRESHOLDS)
+
+    assert honest_low not in [f.subject_id for f in flags]
+
+
+def test_d12_skips_with_a_reason_on_a_thin_series():
+    ctx = Context.from_request(simulate({
+        "seed": 13, "days": 10, "n_lots": 20, "n_recyclers": 2,
+    }))
+
+    flags, skipped = d12_offers_never_learn(ctx, THRESHOLDS)
+
+    assert flags == []
+    assert skipped is not None

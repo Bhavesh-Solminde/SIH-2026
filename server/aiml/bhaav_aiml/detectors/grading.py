@@ -198,11 +198,86 @@ def d11_cross_category_uniformity(ctx: Context, th) -> tuple[list[Flag], Skip | 
 
 def d12_offers_never_learn(ctx: Context, th) -> tuple[list[Flag], Skip | None]:
     """Someone genuinely receiving poor material lowers their published rate;
-    someone lying cannot, because the high rate is what wins the lot. Regress
-    offer_to_final_drop against time: persistently high and flat is the
-    economic tell. Skips until the simulator produces the rate/handover series
-    it needs (AI-ANOMALY-SPEC section 6.3 D12)."""
-    return [], Skip("D12", "insufficient rate-and-handover series for a trend test")
+    someone lying cannot, because the high rate is what wins the lot.
+
+    Two conditions must hold together: a persistent gap between published and
+    paid, AND a published rate that has not fallen. Either alone is innocent —
+    a large gap with a falling rate is a recycler correcting course, and a flat
+    rate with no gap is a recycler who simply pays what they advertise.
+
+    This is the detector that makes the separating equilibrium legible: the
+    honest low-grade recycler declares by dropping their rate and is exonerated;
+    the liar cannot drop theirs without losing the lots that are the whole point.
+    """
+    acc_by_lot = ctx.acceptance_by_lot()
+
+    drops: dict[str, list[float]] = {}
+    stamps: dict[str, list[datetime]] = {}
+    for h in ctx.handovers:
+        if h.get("status") != "CONFIRMED":
+            continue
+        a = acc_by_lot.get(h["lot_id"])
+        if not a or not a["accepted_rate"]:
+            continue
+        drops.setdefault(h["recycler_id"], []).append(
+            1.0 - (h["final_unit_price"] / a["accepted_rate"])
+        )
+        if h.get("handover_ts"):
+            stamps.setdefault(h["recycler_id"], []).append(
+                datetime.fromisoformat(h["handover_ts"])
+            )
+
+    # Published-rate trajectory per recycler, averaged across their categories so
+    # a recycler dealing in more categories is not weighted differently.
+    series: dict[str, dict[str, list[dict]]] = {}
+    for r in ctx.rates:
+        series.setdefault(r["recycler_id"], {}).setdefault(r["category_id"], []).append(r)
+
+    def rate_fall(recycler_id: str) -> float | None:
+        """Fraction by which this recycler's published rate fell across the
+        window. Positive means they lowered it."""
+        falls = []
+        for rows in series.get(recycler_id, {}).values():
+            rows = sorted(rows, key=lambda x: x["valid_from"])
+            if len(rows) < 2 or not rows[0]["price"]:
+                continue
+            falls.append((rows[0]["price"] - rows[-1]["price"]) / rows[0]["price"])
+        return sum(falls) / len(falls) if falls else None
+
+    flags: list[Flag] = []
+    skipped = None
+
+    for recycler_id, ds in sorted(drops.items()):
+        if len(ds) < th["D12_min_handovers"]:
+            skipped = Skip("D12", f"insufficient series: {len(ds)} confirmed handovers for a "
+                                  f"recycler, need {th['D12_min_handovers']}")
+            continue
+
+        ts = sorted(stamps.get(recycler_id, []))
+        span_days = (ts[-1] - ts[0]).days if len(ts) >= 2 else 0
+        if span_days < th["D12_min_days"]:
+            skipped = Skip("D12", f"insufficient series: {span_days} days for a recycler, "
+                                  f"need {th['D12_min_days']}")
+            continue
+
+        fall = rate_fall(recycler_id)
+        if fall is None:
+            skipped = Skip("D12", "no published-rate series to trend")
+            continue
+
+        mean_drop = sum(ds) / len(ds)
+
+        # Persistent gap AND a rate that has not meaningfully fallen.
+        if mean_drop >= th["D12_flat_drop_min"] and fall < th["D12_rate_fall_max"]:
+            flags.append(Flag("D12", "RECYCLER", recycler_id, "WARN", {
+                "mean_drop": round(mean_drop, 4),
+                "rate_trend": round(fall, 4),
+                "n_handovers": len(ds),
+                "span_days": span_days,
+                "threshold": th["D12_flat_drop_min"],
+            }))
+
+    return flags, skipped
 
 
 def d13_single_buyer_market(ctx: Context, th) -> tuple[list[Flag], Skip | None]:
