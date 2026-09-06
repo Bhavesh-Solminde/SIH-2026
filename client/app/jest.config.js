@@ -11,6 +11,14 @@ module.exports = {
         "<rootDir>/test/core-wiring.test.js",
         "<rootDir>/test/db/**/*.test.js",
       ],
+      // test/db/repos.test.js pulls in src/db/repos/lots.js -> src/lib/logger.js,
+      // which reads the RN/Metro global __DEV__ at module-load time. This
+      // project's plain node testEnvironment never defines it (unlike the
+      // "components" project's jest-expo preset), so the suite died before a
+      // single test ran with "ReferenceError: __DEV__ is not defined".
+      globals: {
+        __DEV__: false,
+      },
       transform: {
         "^.+\\.[jt]sx?$": [
           "babel-jest",
@@ -47,6 +55,7 @@ module.exports = {
       testMatch: [
         "<rootDir>/test/audio/**/*.test.js",
         "<rootDir>/test/i18n/strings.test.js",
+        "<rootDir>/test/lib/**/*.test.js",
       ],
       transform: {
         "^.+\\.[jt]sx?$": [
@@ -85,6 +94,14 @@ module.exports = {
       testMatch: [
         "<rootDir>/test/screens/**/*.test.js",
       ],
+      // test/screens/SyncEngine.test.js requires src/screens/SyncEngine.js ->
+      // src/lib/logger.js, which reads the RN/Metro global __DEV__ at
+      // module-load time. Same cause as the "node" project above and unrelated
+      // to the Flow-transform failure in "components" — this project's plain
+      // node testEnvironment never defines __DEV__.
+      globals: {
+        __DEV__: false,
+      },
       transform: {
         "^.+\\.[jt]sx?$": [
           "babel-jest",
@@ -121,9 +138,6 @@ module.exports = {
     // (A05 useStrings hook, A06 Button + Text, A07 CategoryIcon)
     //
     // Uses jest-expo/android preset for the RN test environment and setupFiles.
-    // Sets BABEL_ENV=rn-test so babel.config.js selects "babel-preset-expo"
-    // instead of the node-test path, which correctly inlines EXPO_OS and
-    // makes jest-expo's setup.js work properly.
     // -----------------------------------------------------------------------
     {
       displayName: "components",
@@ -133,10 +147,20 @@ module.exports = {
         "<rootDir>/test/ui/**/*.test.js",
         "<rootDir>/test/components/**/*.test.js",
       ],
-      // Tell babel.config.js to use babel-preset-expo (not @babel/preset-env).
       testEnvironmentOptions: {},
-      globals: {
-        "babel-jest": { BABEL_ENV: "rn-test" },
+      // The previous `globals: { "babel-jest": { BABEL_ENV: "rn-test" } }` here
+      // did nothing: jest `globals` only seeds the test VM's global object, it
+      // never sets process.env, so babel.config.js's BABEL_ENV check never saw
+      // it. Because jest itself sets NODE_ENV=test, babel.config.js's
+      // `NODE_ENV === "test"` branch won, giving this project plain
+      // @babel/preset-env — which cannot parse the Flow-typed
+      // @react-native/js-polyfills sources jest-expo pulls in, and every suite
+      // here died at transform time with "error-guard.js: Missing semicolon
+      // (14:4)" without running a single test. Setting the transform directly
+      // to babel-preset-expo (which understands Flow/RN sources) fixes this
+      // regardless of what babel.config.js's env-based branching does.
+      transform: {
+        "^.+\\.[jt]sx?$": ["babel-jest", { presets: ["babel-preset-expo"] }],
       },
       transformIgnorePatterns: [
         // Transform react-native, expo, and @bhaav/core (all ship ESM or Flow/TS).
