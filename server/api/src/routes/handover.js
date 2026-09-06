@@ -138,9 +138,8 @@ handoverRouter.post("/", requireSession, async (req, res, next) => {
     log.handover.info("handover created", { id, lot_id, finalTotal, referenceCode });
 
     scoreHandover({
-      handoverId: id, lotId: lot_id, recyclerId: req.recycler.id,
-      referencePrice: rate, buyerOffer: rate, finalPrice: finalUnitPrice,
-      condition: inspected_condition,
+      handoverId: id, lotId: lot_id, recyclerId: req.recycler.id, categoryId: lot.categoryId,
+      buyerOffer: rate, finalPrice: finalUnitPrice, condition: inspected_condition,
     }).catch((err) => log.handover.warn("score fire-and-forget failed", err));
 
     return res.status(200).json({
@@ -156,10 +155,50 @@ handoverRouter.post("/", requireSession, async (req, res, next) => {
 });
 
 /**
+ * Market reference price for a category: the median RECYCLER_PUBLISHED rate
+ * (current_rate view — DB.md 3.4) among other VALID recyclers, excluding the
+ * recycler in this transaction. Returns null (never throws) if the lookup
+ * fails or no other VALID recycler publishes a rate for this category —
+ * callers must fall back to the buyer's own rate in that case.
+ */
+async function marketReferencePrice(categoryId, excludeRecyclerId) {
+  try {
+    const rows = await prisma.$queryRaw`
+      SELECT cr.price
+      FROM current_rate cr
+      JOIN recycler r ON r.id = cr.recycler_id
+      WHERE cr.category_id = ${categoryId}::uuid
+        AND cr.recycler_id <> ${excludeRecyclerId}::uuid
+        AND r.authorization_status = 'VALID'
+    `;
+    const prices = rows.map((r) => Number(r.price)).filter((p) => Number.isFinite(p));
+    if (prices.length === 0) return null;
+
+    prices.sort((a, b) => a - b);
+    const mid = prices.length >> 1;
+    const median = prices.length % 2 === 1 ? prices[mid] : (prices[mid - 1] + prices[mid]) / 2;
+    return +median.toFixed(2);
+  } catch (err) {
+    log.handover.warn("market reference lookup failed", { reason: err.message });
+    return null;
+  }
+}
+
+/**
  * Fire-and-forget: call the Vercel ML model and persist any anomaly flag.
  * Never throws — callers must catch().
  */
-async function scoreHandover({ handoverId, lotId, recyclerId, referencePrice, buyerOffer, finalPrice, condition }) {
+async function scoreHandover({ handoverId, lotId, recyclerId, categoryId, buyerOffer, finalPrice, condition }) {
+  // reference_price must be a MARKET reference, not this recycler's own
+  // published rate. Sending the same value for reference_price and
+  // buyer_offer_per_kg (the old behaviour) pins buyer_reference_ratio at a
+  // constant 1.0 and collapses negotiation_gap_pct into abs_price_deviation_pct
+  // — the deployed model ends up running on two independent signals out of
+  // five instead of the four it was designed around. Falls back to the
+  // buyer's own rate only when no other VALID recycler publishes a rate for
+  // this category: a degraded score beats no score.
+  const referencePrice = (await marketReferencePrice(categoryId, recyclerId)) ?? buyerOffer;
+
   const result = await callPredict({
     reference_price: referencePrice,
     buyer_offer_per_kg: buyerOffer,
