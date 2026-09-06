@@ -338,9 +338,20 @@ recyclerRouter.get("/flags", async (req, res, next) => {
       ]),
     ];
 
+    // D1 fires on roughly a third of all handovers — it is a per-handover INFO
+    // signal, not a finding. AI-ANOMALY-SPEC sets an alert budget of 5%, and that
+    // budget governs what a human SEES: an operator scrolling hundreds of INFO
+    // rows to reach a handful of real ones stops reading the page entirely.
+    //
+    // Filtered here rather than by raising D1_deviation, because the INFO rows
+    // are real signal that D2 and the evaluation harness both consume — they
+    // belong in the data, just not in the operator's default view.
+    const includeInfo = req.query.includeInfo === "1";
+
     const flags = await prisma.anomalyFlag.findMany({
       where: {
         resolvedAt: null,
+        ...(includeInfo ? {} : { severity: { not: "INFO" } }),
         OR: [
           { subjectType: "RECYCLER", subjectId: req.recycler.id },
           { subjectType: "HANDOVER", subjectId: { in: handoverIds } },
