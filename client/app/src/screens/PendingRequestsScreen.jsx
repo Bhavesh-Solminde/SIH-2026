@@ -1,30 +1,29 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, FlatList, StyleSheet, TouchableOpacity,
-  ActivityIndicator, RefreshControl,
+  ActivityIndicator, RefreshControl, Alert,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '../ui/Screen';
 import { Text } from '../ui/Text';
-import { colors, spacing } from '../ui/tokens';
+import { colors, spacing, conditionColors } from '../ui/tokens';
 import { useVoice } from '../hooks/useVoice';
+import { useStrings } from '../i18n/useStrings';
 import { getDeviceId } from '../lib/deviceId';
 import { log } from '../lib/logger';
 
 let Location = null;
 try { Location = require('expo-location'); } catch {}
 
-const CONDITION_MR = { GOOD: 'चांगली', FAIR: 'ठीक', POOR: 'खराब' };
-const CONDITION_COLOR = {
-  GOOD: { bg: '#E8F5E9', text: '#2E7D32' },
-  FAIR: { bg: '#FFF8E1', text: '#F57F17' },
-  POOR: { bg: '#FFEBEE', text: '#C62828' },
-};
+const CONDITION_COLOR = conditionColors;
 
 export default function PendingRequestsScreen({ apiUrl, navigation }) {
+  const t = useStrings();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(false);
   const [confirming, setConfirming] = useState(null);
+  const [disputing, setDisputing]   = useState(null);
   const { speak, speakNumber } = useVoice();
 
   const fetchPending = useCallback(async () => {
@@ -57,9 +56,18 @@ export default function PendingRequestsScreen({ apiUrl, navigation }) {
   useEffect(() => {
     if (loading) return;
     if (requests.length > 0) {
-      speak(`${requests.length} विनंत्या प्रलंबित`);
+      speak(t('requests_pending', { count: requests.length }));
     }
-  }, [loading, requests.length, speak]);
+  }, [loading, requests.length, speak, t]);
+
+  // Read one amount back, digit by digit — "चार तीन नऊ एक शून्य" for ₹43,910.
+  // Grammatical composition topped out at 9,999 and, above that, produced a
+  // sentence a collector then had to convert back into the figure printed in
+  // front of them. Digits map one-to-one onto what is on the screen, which
+  // is the only form that can actually be checked.
+  const readAmount = (amount) => {
+    speakNumber(Math.round(Number(amount) || 0));
+  };
 
   const handleConfirm = async (item) => {
     setConfirming(item.lotId);
@@ -83,15 +91,51 @@ export default function PendingRequestsScreen({ apiUrl, navigation }) {
         body: JSON.stringify({ handoverLat, handoverLng }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      speak('हस्तांतरण पुष्टी झाली');
-      await speakNumber(item.finalTotal);
+      speak(t('voice_handover_confirmed'));
       await fetchPending();
     } catch (err) {
       log.handover.error('confirm failed', err);
-      speak('चूक झाली, पुन्हा प्रयत्न करा');
+      speak(t('voice_error_generic'));
     } finally {
       setConfirming(null);
     }
+  };
+
+  // The other half of the counter-signature. This was a disabled
+  // "वाद घाला (लवकरच)" pill: a collector shown a price they had not agreed
+  // to could only accept it or walk away, and the record therefore contained
+  // nothing but agreements. Disagreeing now writes a real DISPUTED handover.
+  const handleDispute = (item) => {
+    Alert.alert(
+      t('dispute_confirm_title'),
+      t('dispute_confirm_message', { amount: Math.round(item.finalTotal).toLocaleString('en-IN') }),
+      [
+        { text: t('dispute_cancel'), style: 'cancel' },
+        {
+          text: t('dispute_confirm_yes'),
+          style: 'destructive',
+          onPress: async () => {
+            setDisputing(item.lotId);
+            try {
+              const res = await fetch(`${apiUrl}/handover/${item.lotId}/dispute`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({}),
+              });
+              if (!res.ok) throw new Error(`HTTP ${res.status}`);
+              log.handover.warn('collector disputed', { lotId: item.lotId });
+              speak(t('voice_dispute_recorded'));
+              await fetchPending();
+            } catch (err) {
+              log.handover.error('dispute failed', err);
+              speak(t('voice_error_generic'));
+            } finally {
+              setDisputing(null);
+            }
+          },
+        },
+      ],
+    );
   };
 
   const openDetail = (item) => {
@@ -110,6 +154,8 @@ export default function PendingRequestsScreen({ apiUrl, navigation }) {
 
   const renderItem = ({ item }) => {
     const isConfirming = confirming === item.lotId;
+    const isDisputing  = disputing  === item.lotId;
+    const busy         = isConfirming || isDisputing;
     const condStyle = CONDITION_COLOR[item.inspectedCondition] ?? { bg: colors.gray200, text: colors.text };
 
     return (
@@ -119,7 +165,7 @@ export default function PendingRequestsScreen({ apiUrl, navigation }) {
           onPress={() => openDetail(item)}
           activeOpacity={0.7}
           accessibilityRole="button"
-          accessibilityLabel="तपशील पहा"
+          accessibilityLabel={t('requests_view_details_a11y')}
         >
           <View style={styles.cardTop}>
             <Text style={styles.amount}>
@@ -127,7 +173,7 @@ export default function PendingRequestsScreen({ apiUrl, navigation }) {
             </Text>
             <View style={[styles.condBadge, { backgroundColor: condStyle.bg }]}>
               <Text style={[styles.condText, { color: condStyle.text }]}>
-                {CONDITION_MR[item.inspectedCondition] ?? item.inspectedCondition}
+                {t(`condition_${(item.inspectedCondition ?? '').toLowerCase()}`)}
               </Text>
             </View>
           </View>
@@ -138,30 +184,49 @@ export default function PendingRequestsScreen({ apiUrl, navigation }) {
           {item.recyclerName && (
             <Text style={styles.meta}>{item.recyclerName}</Text>
           )}
-          <Text style={styles.ref}>संदर्भ: {item.referenceCode}</Text>
-          <Text style={styles.tapHint}>QR पाहण्यासाठी टच करा →</Text>
+          <Text style={styles.ref}>{t('requests_reference', { code: item.referenceCode })}</Text>
+          <Text style={styles.tapHint}>{t('requests_tap_for_qr')}</Text>
         </TouchableOpacity>
 
-        {/* Action buttons */}
+        {/* Hear the amount. A collector who cannot read ₹43,910 off the
+            screen has no other way to check what they are agreeing to. */}
+        <TouchableOpacity
+          style={styles.listenBtn}
+          onPress={() => readAmount(item.finalTotal)}
+          activeOpacity={0.75}
+          accessibilityRole="button"
+          accessibilityLabel={t('requests_listen_amount')}
+        >
+          <Ionicons name="volume-medium" size={16} color={colors.primary} />
+          <Text style={styles.listenText}>{t('requests_listen_amount')}</Text>
+        </TouchableOpacity>
+
+        {/* Both answers, both real. */}
         <View style={styles.actions}>
           <TouchableOpacity
-            style={[styles.confirmBtn, isConfirming && styles.confirmBtnDisabled]}
+            style={[styles.confirmBtn, busy && styles.btnDisabled]}
             onPress={() => handleConfirm(item)}
-            disabled={isConfirming}
+            disabled={busy}
             activeOpacity={0.75}
             accessibilityRole="button"
           >
+            <Ionicons name="checkmark-circle" size={18} color="#fff" />
             <Text style={styles.confirmText}>
-              {isConfirming ? 'प्रतीक्षा…' : 'सहमत आहे ✓'}
+              {isConfirming ? t('waiting') : t('requests_agree')}
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.disputeBtn}
-            onPress={() => speak('विवाद सुविधा लवकरच येईल')}
+            style={[styles.disputeBtn, busy && styles.btnDisabled]}
+            onPress={() => handleDispute(item)}
+            disabled={busy}
             activeOpacity={0.75}
+            accessibilityRole="button"
           >
-            <Text style={styles.disputeText}>वाद घाला</Text>
+            <Ionicons name="close-circle" size={18} color={colors.danger} />
+            <Text style={styles.disputeText}>
+              {isDisputing ? t('waiting') : t('requests_disagree')}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -171,9 +236,14 @@ export default function PendingRequestsScreen({ apiUrl, navigation }) {
   return (
     <Screen style={styles.container}>
       <View style={styles.titleRow}>
-        <Text variant="lg" style={styles.title}>प्रलंबित विनंत्या</Text>
-        <TouchableOpacity onPress={fetchPending} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Text style={styles.refreshBtn}>↻ ताजे करा</Text>
+        <Text variant="lg" style={styles.title}>{t('nav_requests_header')}</Text>
+        <TouchableOpacity
+          onPress={fetchPending}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          style={styles.refreshRow}
+        >
+          <Ionicons name="refresh" size={16} color={colors.primary} />
+          <Text style={styles.refreshBtn}>{t('refresh')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -181,10 +251,10 @@ export default function PendingRequestsScreen({ apiUrl, navigation }) {
         <ActivityIndicator size="large" color={colors.primary} style={styles.loader} />
       ) : requests.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyIcon}>📭</Text>
-          <Text style={styles.emptyTitle}>कोणतीही विनंती नाही</Text>
+          <Ionicons name="mail-open-outline" size={48} color={colors.textDisabled} style={styles.emptyIconView} />
+          <Text style={styles.emptyTitle}>{t('requests_empty_title')}</Text>
           <Text style={styles.emptySub}>
-            पुनर्वापरकर्त्याने माल तपासल्यावर येथे दिसेल.
+            {t('requests_empty_sub')}
           </Text>
         </View>
       ) : (
@@ -214,10 +284,11 @@ const styles = StyleSheet.create({
     paddingBottom: spacing[2],
   },
   title: { fontWeight: '700', color: colors.primary },
-  refreshBtn: { color: colors.primary, fontSize: 18 },
+  refreshRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[1] },
+  refreshBtn: { color: colors.primary, fontSize: 15, fontWeight: '600' },
   loader: { flex: 1 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing[6] },
-  emptyIcon: { fontSize: 52, marginBottom: spacing[3] },
+  emptyIconView: { marginBottom: spacing[3] },
   emptyTitle: { fontWeight: '700', color: colors.text, textAlign: 'center', fontSize: 17 },
   emptySub: { color: colors.textSecondary, textAlign: 'center', marginTop: spacing[2], lineHeight: 22 },
   list: { paddingBottom: spacing[8] },
@@ -233,16 +304,25 @@ const styles = StyleSheet.create({
   meta: { color: colors.textSecondary, fontSize: 13, marginBottom: 2 },
   ref: { color: colors.textSecondary, fontSize: 12, marginBottom: 4 },
   tapHint: { color: colors.primary, fontSize: 11, fontWeight: '600', marginBottom: spacing[3] },
-  actions: { gap: spacing[2] },
-  confirmBtn: {
-    backgroundColor: colors.primary, borderRadius: 10,
-    paddingVertical: spacing[3], alignItems: 'center', marginBottom: spacing[2],
+  listenBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: spacing[1], paddingVertical: spacing[2], marginBottom: spacing[2],
+    borderRadius: 10, backgroundColor: colors.primarySurface,
   },
-  confirmBtnDisabled: { opacity: 0.5 },
+  listenText: { color: colors.primary, fontWeight: '700', fontSize: 14 },
+  actions: { flexDirection: 'row', gap: spacing[2] },
+  confirmBtn: {
+    flex: 1, flexDirection: 'row', gap: spacing[1],
+    backgroundColor: colors.primary, borderRadius: 10,
+    paddingVertical: spacing[3], alignItems: 'center', justifyContent: 'center',
+  },
+  btnDisabled: { opacity: 0.5 },
   confirmText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   disputeBtn: {
-    borderWidth: 1, borderColor: colors.border, borderRadius: 10,
-    paddingVertical: spacing[2], alignItems: 'center',
+    flex: 1, flexDirection: 'row', gap: spacing[1],
+    borderWidth: 1.5, borderColor: colors.dangerLight, borderRadius: 10,
+    backgroundColor: colors.dangerSurface,
+    paddingVertical: spacing[3], alignItems: 'center', justifyContent: 'center',
   },
-  disputeText: { color: colors.textSecondary, fontSize: 13 },
+  disputeText: { color: colors.danger, fontWeight: '700', fontSize: 15 },
 });

@@ -78,6 +78,30 @@ export function composeNumber(n, _lang = 'mr') {
 }
 
 /**
+ * composeDigits(n) → string[]
+ *
+ * Reads a number one digit at a time: 43910 → four, three, nine, one, zero.
+ *
+ * This is the right form for money on screen. composeNumber() is bounded at
+ * 9999 and produces grammar ("forty three thousand nine hundred ten") that a
+ * collector then has to map back onto the digits printed in front of them.
+ * Reading the digits themselves is unbounded, is verifiable against the
+ * screen character by character, and is how amounts are read aloud over a
+ * phone at a scrap yard.
+ *
+ * Only the ONES clips are used, so this works in every language pack that
+ * has 0–9 without needing a tens/hundreds/thousands vocabulary.
+ *
+ * @param {number} n      A non-negative number; decimals are rounded away
+ * @param {'mr'|'hi'} _lang  Language tag (reserved for future divergence)
+ * @returns {string[]}   One clip name per digit
+ */
+export function composeDigits(n, _lang = 'mr') {
+  const num = Math.round(Math.abs(Number(n) || 0));
+  return String(num).split('').map((d) => ONES[Number(d)]);
+}
+
+/**
  * Compose clip names for a number in the range 1–99.
  * @param {number} n
  * @returns {string[]}

@@ -9,8 +9,17 @@
   --c-primary:  #1a6b3c;   /* green — recycling theme */
   --c-danger:   #c0392b;
   --c-warn:     #d68910;
+  /* Single source for the pale-amber "needs attention" tint — was
+     independently redeclared as raw #fff3cd/#856404 in three CSS rules
+     plus one inline style on the history table, all drifting copies of
+     the same pair. */
+  --c-warn-surface: #fff3cd;
+  --c-warn-text:    #856404;
   --c-text:     #212529;
-  --c-muted:    #6c757d;
+  /* #6c757d on --c-bg measured 4.45:1 — just under the 4.5:1 AA floor if
+     ever placed directly on the page background rather than a card.
+     #5b6470 clears both (5.7:1 on --c-bg, 6.0:1 on --c-surface). */
+  --c-muted:    #5b6470;
   --radius:     6px;
   --shadow:     0 1px 3px rgba(0,0,0,.08);
   font-size: 15px;
@@ -21,6 +30,23 @@ body {
   background: var(--c-bg);
   color: var(--c-text);
   line-height: 1.5;
+}
+
+/* ── Browser surfaces (theme what the page didn't draw) ───────────────────
+   No keyboard-focus ring existed on nav links or buttons beyond the browser
+   default, and text selection used the OS default color, both invisible
+   next to the rest of the token system. */
+:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+nav :focus-visible {
+  outline-color: #fff;
+}
+::selection {
+  background: var(--c-primary);
+  color: #fff;
 }
 
 /* ── Nav ────────────────────────────────────────────────────────────────── */
@@ -34,8 +60,19 @@ nav {
   height: 48px;
   box-shadow: var(--shadow);
 }
-nav a { color: rgba(255,255,255,.85); text-decoration: none; font-size: .9rem; font-weight: 500; }
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.nav-links::-webkit-scrollbar { display: none; }
+nav a { color: rgba(255,255,255,.85); text-decoration: none; font-size: .9rem; font-weight: 500; padding-bottom: 2px; border-bottom: 2px solid transparent; white-space: nowrap; }
 nav a:hover { color: #fff; }
+/* No page previously distinguished itself in the tab bar — every link looked
+   identical regardless of which page you were on. */
+nav a[aria-current="page"] { color: #fff; border-bottom-color: #fff; }
 nav button {
   margin-left: auto;
   background: transparent;
@@ -69,12 +106,18 @@ h2 { font-size: 1.15rem; font-weight: 600; margin-bottom: .75rem; }
   margin-bottom: 1rem; font-size: .9rem;
 }
 [role="note"] {
-  background: #fff3cd; color: #856404;
+  background: var(--c-warn-surface); color: var(--c-warn-text);
   padding: .5rem 1rem; border-radius: var(--radius);
   margin-bottom: 1rem; font-size: .9rem;
 }
 
 /* ── Tables ─────────────────────────────────────────────────────────────── */
+/* A table squeezed to 100% width on a narrow viewport truncates its own
+   cell content (the rate table's KG/PIECE <select> rendered as "K"/"P" at
+   390px) rather than reading badly — scroll the table horizontally instead
+   of crushing its columns. */
+.table-scroll { overflow-x: auto; margin-bottom: 1rem; }
+.table-scroll table { min-width: 560px; margin-bottom: 0; }
 table {
   width: 100%;
   border-collapse: collapse;
@@ -140,7 +183,7 @@ button.danger:hover { background: #a93226; }
   display: inline-block; padding: .15rem .5rem;
   border-radius: 999px; font-size: .75rem; font-weight: 600;
 }
-.badge-warn  { background: #fff3cd; color: #856404; }
+.badge-warn  { background: var(--c-warn-surface); color: var(--c-warn-text); }
 .badge-danger { background: #f8d7da; color: #721c24; }
 .badge-ok    { background: #d4edda; color: #155724; }
 
@@ -169,3 +212,237 @@ li em { color: var(--c-muted); font-style: normal; font-size: .8rem; }
 /* ── Action row (publish / copy) ────────────────────────────────────────── */
 .action-row { display: flex; gap: .75rem; margin-top: .75rem; }
 
+/* ── Empty states ───────────────────────────────────────────────────────── */
+.empty-state {
+  display: flex; align-items: center; gap: .5rem;
+  color: var(--c-muted); padding: 1rem 0;
+}
+
+/* ── Severity / condition palette ───────────────────────────────────────────
+   Single source of truth for the "good / caution / bad" three-state colour
+   set. Previously this same triad was independently redeclared as inline
+   hex in FlagCard.jsx (INFO/WARN/CRITICAL) and HandoverForm.jsx
+   (GOOD/FAIR/POOR) in addition to the .badge-* classes here — three copies
+   that could each drift. Semantic aliases map onto the existing .badge-*
+   tones so a flag's WARN and a lot's FAIR read as the same color. */
+.tone-ok      { background: #d4edda; color: #155724; border-color: #28a745; }
+.tone-caution { background: var(--c-warn-surface); color: var(--c-warn-text); border-color: #ffc107; }
+tr[data-downgraded] td { background: var(--c-warn-surface); }
+.tone-bad     { background: #f8d7da; color: #721c24; border-color: #dc3545; }
+.tone-info    { background: #dbeafe; color: #1e40af; border-color: #60a5fa; }
+
+/* ── Condition picker (HandoverForm) ─────────────────────────────────────
+   Specificity note: the generic `button[type="button"]` rule above (an
+   element+attribute selector) outranks a bare `.cond-btn` class, so it must
+   be targeted as `button.cond-btn` to actually override the green fill. */
+button.cond-btn {
+  padding: 1rem .5rem; border-radius: 8px; border: 2px solid var(--c-border);
+  background: var(--c-surface); color: var(--c-muted); font-weight: 700;
+  font-size: .9rem; display: flex; flex-direction: column; align-items: center; gap: .35rem;
+}
+button.cond-btn:hover { background: var(--c-surface); }
+button.cond-btn.selected { border-color: currentColor; }
+
+/* ── Responsive: two-column layouts stack under 720px ───────────────────── */
+.split-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: start; }
+@media (max-width: 720px) {
+  .split-2 { grid-template-columns: 1fr; }
+  /* Five tabs + Sign out don't fit a 390px nav at full size — scroll the
+     tab group horizontally instead of wrapping (wrapping pushed Sign out,
+     pinned via margin-left:auto, onto its own second line). The mask fades
+     the trailing edge so a partly-hidden tab reads as "more to scroll to"
+     rather than silently disappearing with no affordance. */
+  nav { gap: .75rem; padding: 0 .75rem; }
+  .nav-links {
+    gap: 1rem;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent 100%);
+    mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent 100%);
+  }
+  nav a { font-size: .85rem; }
+  nav button { flex-shrink: 0; padding: .3rem .6rem; font-size: .85rem; }
+  main { padding: 0 1rem; }
+  .table-scroll {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent 100%);
+    mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent 100%);
+  }
+}
+
+
+/* ── QR scanner ──────────────────────────────────────────────────────────
+   The reader element must always occupy a real box. html5-qrcode measures
+   its container inside start() to size both the <video> and the scan
+   region; when the container was `display: none` until scanning began it
+   measured 0×0, the scan box was sized against nothing, and the camera ran
+   without ever decoding — no error, no feedback, just a live preview that
+   never matched. The frame below is always laid out; only its contents
+   change between idle and live. */
+.qr-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  max-height: 320px;
+  margin-bottom: .75rem;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  background: #101418;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.qr-frame .qr-reader { width: 100%; height: 100%; }
+.qr-frame .qr-reader video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;
+  display: block;
+}
+/* html5-qrcode injects its own scan-region image and a shaded overlay; both
+   fight the framing guide below and neither is needed here. */
+.qr-frame .qr-reader img[alt="Info icon"],
+.qr-frame .qr-reader #qr-shaded-region { display: none !important; }
+
+/* Corner brackets — the aiming target. A plain square edge reads as a
+   border; brackets read as "put it in here". */
+.qr-guide {
+  position: absolute;
+  inset: 18%;
+  pointer-events: none;
+  border-radius: 10px;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .35);
+  background:
+    linear-gradient(#fff, #fff) left  top    / 22px 3px no-repeat,
+    linear-gradient(#fff, #fff) left  top    / 3px 22px no-repeat,
+    linear-gradient(#fff, #fff) right top    / 22px 3px no-repeat,
+    linear-gradient(#fff, #fff) right top    / 3px 22px no-repeat,
+    linear-gradient(#fff, #fff) left  bottom / 22px 3px no-repeat,
+    linear-gradient(#fff, #fff) left  bottom / 3px 22px no-repeat,
+    linear-gradient(#fff, #fff) right bottom / 22px 3px no-repeat,
+    linear-gradient(#fff, #fff) right bottom / 3px 22px no-repeat;
+}
+.qr-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  padding: 1rem;
+  text-align: center;
+  color: rgba(255, 255, 255, .72);
+  font-size: .85rem;
+}
+.qr-status {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  padding: .4rem .6rem;
+  background: rgba(0, 0, 0, .6);
+  color: #fff;
+  font-size: .8rem;
+  text-align: center;
+}
+
+/* ── Final price (HandoverForm) ─────────────────────────────────────────── */
+fieldset.final-price {
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  padding: .9rem 1rem 1rem;
+  margin-bottom: 1rem;
+}
+fieldset.final-price legend {
+  font-size: .8rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .04em; color: var(--c-muted); padding: 0 .35rem;
+}
+.final-price-row { margin-bottom: .75rem; }
+.final-price-row label {
+  display: block; font-size: .85rem; font-weight: 500;
+  margin-bottom: .3rem; color: var(--c-muted);
+}
+.final-price-input {
+  display: flex; align-items: center; gap: .5rem;
+  border: 1px solid var(--c-border); border-radius: var(--radius);
+  background: var(--c-surface); padding-left: .65rem;
+}
+.final-price-input:focus-within {
+  border-color: var(--c-primary); box-shadow: 0 0 0 2px rgba(26,107,60,.15);
+}
+.final-price-input span { color: var(--c-muted); font-size: 1.05rem; }
+.final-price-input input[type="number"] {
+  border: none; box-shadow: none; background: transparent;
+  font-size: 1.15rem; font-weight: 700; padding-left: 0;
+}
+.final-price-input input[type="number"]:focus { box-shadow: none; }
+
+.final-price-suggestions {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: .5rem; margin-bottom: .75rem;
+}
+button.suggestion-btn {
+  flex-direction: column; align-items: flex-start; gap: .15rem;
+  padding: .45rem .6rem; text-align: left; line-height: 1.25;
+}
+.suggestion-label { font-size: .72rem; color: var(--c-muted); font-weight: 500; }
+.suggestion-value { font-size: .9rem; font-weight: 700; }
+.final-price-total {
+  font-size: .85rem; color: var(--c-muted); margin: 0;
+  padding-top: .6rem; border-top: 1px dashed var(--c-border);
+}
+.final-price-total strong { color: var(--c-primary); font-size: 1rem; }
+
+/* ── Handover summary (verify, awaiting collector) ──────────────────────── */
+.handover-summary {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem; margin-bottom: 1.25rem;
+}
+.handover-summary dt {
+  font-size: .75rem; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--c-muted); margin-bottom: .2rem;
+}
+.handover-summary dd { font-weight: 600; font-size: .95rem; }
+.handover-summary code {
+  background: #f1f3f5; padding: .1rem .4rem; border-radius: 4px;
+  letter-spacing: .1em;
+}
+
+/* ── Incoming acceptances ────────────────────────────────────────────────
+   Overrides the generic `li` flex row: these need two columns (facts,
+   actions) rather than one run-on line of middot-separated values. */
+li.acceptance-row {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 1rem; padding: .9rem 1rem; flex-wrap: nowrap;
+}
+.acceptance-main { min-width: 0; flex: 1; }
+.acceptance-head {
+  display: flex; align-items: baseline; flex-wrap: wrap;
+  gap: .5rem; margin-bottom: .55rem;
+}
+.acceptance-category { font-size: 1rem; font-weight: 700; letter-spacing: .02em; }
+.acceptance-qty {
+  font-size: .85rem; font-weight: 600; color: var(--c-text);
+  background: #f1f3f5; padding: .05rem .45rem; border-radius: 999px;
+}
+.acceptance-date { font-size: .8rem; color: var(--c-muted); margin-left: auto; }
+.acceptance-facts {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem;
+}
+.acceptance-facts dt {
+  font-size: .7rem; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--c-muted); margin-bottom: .1rem;
+}
+.acceptance-facts dd { font-size: .88rem; font-weight: 600; }
+.acceptance-facts code { font-size: .8rem; color: var(--c-muted); font-weight: 500; }
+.acceptance-actions {
+  display: flex; flex-direction: column; gap: .4rem;
+  flex-shrink: 0; align-items: stretch;
+}
+.acceptance-actions button { justify-content: center; }
+
+@media (max-width: 720px) {
+  .final-price-suggestions { grid-template-columns: 1fr; }
+  .handover-summary { grid-template-columns: 1fr; }
+  li.acceptance-row { flex-direction: column; }
+  .acceptance-actions { flex-direction: row; width: 100%; }
+  .acceptance-actions button { flex: 1; }
+  .acceptance-facts { grid-template-columns: 1fr 1fr; }
+}

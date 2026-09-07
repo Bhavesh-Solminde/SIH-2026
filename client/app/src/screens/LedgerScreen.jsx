@@ -7,7 +7,7 @@ import { Screen } from '../ui/Screen';
 import { Text } from '../ui/Text';
 import { useStrings } from '../i18n/useStrings';
 import { CategoryIcon } from '../components/CategoryIcon';
-import { colors, spacing } from '../ui/tokens';
+import { colors, spacing, statusColors } from '../ui/tokens';
 import { useVoice } from '../hooks/useVoice';
 import { listLots, earningsTotals } from '../db/repos/lots';
 import { getDeviceId } from '../lib/deviceId';
@@ -23,14 +23,20 @@ import { log } from '../lib/logger';
 const LEDGER_CACHE_KEY = 'bhaav_ledger_v1';
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 min for ledger (changes more frequently than rates)
 
-const STATUS_CHIP = {
-  DRAFT:            { label: 'Draft',     bg: colors.gray200,        text: colors.textSecondary },
-  PENDING:          { label: 'Pending',   bg: colors.warningSurface,  text: colors.warning },
-  ACCEPTED:         { label: 'Accepted',  bg: '#E3F2FD',              text: '#1565C0' },
-  AWAITING_CONFIRM: { label: 'Awaiting',  bg: '#E3F2FD',              text: '#1565C0' },
-  CONFIRMED:        { label: 'Confirmed', bg: colors.primarySurface,  text: colors.primary },
-  DISPUTED:         { label: 'Disputed',  bg: colors.dangerSurface,   text: colors.danger },
+const STATUS_LABEL = {
+  DRAFT:            'Draft',
+  PENDING:          'Pending',
+  ACCEPTED:         'Accepted',
+  AWAITING_CONFIRM: 'Awaiting',
+  CONFIRMED:        'Confirmed',
+  DISPUTED:         'Disputed',
 };
+const STATUS_CHIP = Object.fromEntries(
+  Object.entries(STATUS_LABEL).map(([code, label]) => [
+    code,
+    { label, ...(statusColors[code] ?? statusColors.DRAFT) },
+  ]),
+);
 
 function StatusChip({ status }) {
   const chip = STATUS_CHIP[status] ?? STATUS_CHIP.DRAFT;
@@ -159,7 +165,7 @@ export default function LedgerScreen({ navigation, db, apiUrl }) {
             {' · '}{dateStr}
           </Text>
           {item.referenceCode && (
-            <Text variant="sm" style={styles.refCode}>Ref: {item.referenceCode}</Text>
+            <Text variant="sm" style={styles.refCode}>{t('requests_reference', { code: item.referenceCode })}</Text>
           )}
           {item.recyclerName && (
             <Text variant="sm" style={styles.recycler}>{item.recyclerName}</Text>
@@ -191,7 +197,7 @@ export default function LedgerScreen({ navigation, db, apiUrl }) {
       ) : lots.length === 0 ? (
         <View style={styles.empty}>
           <Ionicons name="wallet-outline" size={48} color={colors.textDisabled} style={styles.emptyIcon} />
-          <Text style={styles.emptyText}>अद्याप कोणतीही नोंद नाही</Text>
+          <Text style={styles.emptyText}>{t('lots_empty_all')}</Text>
         </View>
       ) : (
         <FlatList

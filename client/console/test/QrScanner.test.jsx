@@ -16,6 +16,9 @@ vi.mock("html5-qrcode", () => ({
     this.stop = stopMock;
     this.clear = clearMock;
   }),
+  // The component restricts decoding to QR only and asks for the native
+  // BarcodeDetector where available; both come off this enum at module load.
+  Html5QrcodeSupportedFormats: { QR_CODE: 0 },
 }));
 
 // verify/page.jsx needs useSearchParams, and Nav (rendered by the page)

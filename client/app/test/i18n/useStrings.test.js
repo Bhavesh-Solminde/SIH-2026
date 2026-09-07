@@ -1,7 +1,7 @@
-import React from 'react';
-import { render } from '@testing-library/react-native';
-import { Text } from 'react-native';
-import { LanguageProvider } from '../../src/i18n/LanguageContext.js';
+import React, { useState } from 'react';
+import { render, fireEvent } from '@testing-library/react-native';
+import { Text, TouchableOpacity } from 'react-native';
+import { LanguageProvider, useLanguage } from '../../src/i18n/LanguageContext.js';
 import { useStrings } from '../../src/i18n/useStrings.js';
 
 // Helper component that renders t(key) output as text
@@ -66,6 +66,108 @@ describe('useStrings / t(key)', () => {
         </LanguageProvider>
       );
       expect(getByTestId('output').props.children).toBe('बैटरी');
+    });
+  });
+
+  // Screens list `t` in the dependency array of the useCallback they hand to
+  // useFocusEffect. A `t` with a fresh identity on every render made those
+  // effects re-run on every state change, so a screen re-announced its own
+  // name over TTS after every keypad tap — the reported "it says प्रमाण
+  // again and again". The identity is the contract; this guards it.
+  describe('referential stability', () => {
+    function IdentityProbe({ onRender }) {
+      const t = useStrings();
+      const { setLang } = useLanguage();
+      const [count, setCount] = useState(0);
+      onRender(t);
+      return (
+        <>
+          <TouchableOpacity testID="bump" onPress={() => setCount((c) => c + 1)}>
+            <Text testID="output">{t('ok')}{count}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity testID="to-hindi" onPress={() => setLang('hi')}>
+            <Text>switch</Text>
+          </TouchableOpacity>
+        </>
+      );
+    }
+
+    it('returns the same t across re-renders that do not change the language', () => {
+      const seen = [];
+      const { getByTestId } = render(
+        <LanguageProvider initialLang="mr">
+          <IdentityProbe onRender={(t) => seen.push(t)} />
+        </LanguageProvider>
+      );
+
+      fireEvent.press(getByTestId('bump'));
+      fireEvent.press(getByTestId('bump'));
+
+      expect(seen.length).toBeGreaterThan(1);
+      expect(new Set(seen).size).toBe(1);
+    });
+
+    it('still returns a new t when the language changes, so consumers re-run', () => {
+      const seen = [];
+      const { getByTestId } = render(
+        <LanguageProvider initialLang="mr">
+          <IdentityProbe onRender={(t) => seen.push(t)} />
+        </LanguageProvider>
+      );
+
+      // LanguageProvider seeds its state from initialLang once, so switching
+      // has to go through setLang — re-rendering with a different prop does
+      // not change the active language.
+      fireEvent.press(getByTestId('to-hindi'));
+
+      const distinct = [...new Set(seen)];
+      expect(distinct).toHaveLength(2);
+      const [mr, hi] = distinct;
+      expect(mr('ok')).toBe('ठीक आहे');
+      expect(hi('ok')).toBe('ठीक है');
+    });
+  });
+
+  describe('interpolation and plurals', () => {
+    function ParamReader({ keyName, params }) {
+      const t = useStrings();
+      return <Text testID="output">{t(keyName, params)}</Text>;
+    }
+
+    it('fills a {count} placeholder', () => {
+      const { getByTestId } = render(
+        <LanguageProvider initialLang="en">
+          <ParamReader keyName="home_sync_pending" params={{ count: 3 }} />
+        </LanguageProvider>
+      );
+      expect(getByTestId('output').props.children).toBe('3 pending');
+    });
+
+    it('selects the _one variant when count is 1', () => {
+      const { getByTestId } = render(
+        <LanguageProvider initialLang="en">
+          <ParamReader keyName="requests_pending" params={{ count: 1 }} />
+        </LanguageProvider>
+      );
+      expect(getByTestId('output').props.children).toBe('1 request pending');
+    });
+
+    it('selects the _other variant when count is not 1', () => {
+      const { getByTestId } = render(
+        <LanguageProvider initialLang="en">
+          <ParamReader keyName="requests_pending" params={{ count: 5 }} />
+        </LanguageProvider>
+      );
+      expect(getByTestId('output').props.children).toBe('5 requests pending');
+    });
+
+    it('selects the _other variant when count is 0', () => {
+      const { getByTestId } = render(
+        <LanguageProvider initialLang="mr">
+          <ParamReader keyName="requests_pending" params={{ count: 0 }} />
+        </LanguageProvider>
+      );
+      expect(getByTestId('output').props.children).toBe('0 विनंत्या प्रलंबित');
     });
   });
 

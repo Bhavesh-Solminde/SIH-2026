@@ -1,16 +1,17 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, Linking, Share, Platform, Alert } from 'react-native';
+import { View, ScrollView, StyleSheet, Linking, Share, Platform, Alert } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import QRCode from 'react-native-qrcode-svg';
 import { Screen } from '../ui/Screen';
 import { Text } from '../ui/Text';
 import { Button } from '../ui/Button';
 import { useStrings } from '../i18n/useStrings';
 import { useFocusEffect } from '@react-navigation/native';
-import { play } from '../audio';
 import { useVoice } from '../hooks/useVoice';
 import { colors, spacing } from '../ui/tokens';
 import { createLot } from '../db/repos/lots';
 import { createAcceptance } from '../db/repos/acceptances';
-import { uuidv7 } from '@bhaav/core/ids';
+import { uuidv7, referenceCodeFromUuid } from '@bhaav/core/ids';
 import { getDeviceId } from '../lib/deviceId';
 import { log } from '../lib/logger';
 import { webDirectionsUrl, nativeDirectionsUrl, shareMessage, hasLocation } from '../lib/directions';
@@ -21,6 +22,18 @@ import { webDirectionsUrl, nativeDirectionsUrl, shareMessage, hasLocation } from
 export default function AcceptScreen({ navigation, route, db, apiUrl }) {
   const t = useStrings();
   const { speak } = useVoice();
+
+  // Declared before the callbacks that list `recycler` in their dependency
+  // arrays. It used to sit below them, which reads `recycler` inside the
+  // deps array while it is still in its temporal dead zone. That survives
+  // only because the release Babel config downgrades const to var, where the
+  // read yields undefined instead of throwing — so the deps were permanently
+  // [undefined] and the callbacks never re-memoised. It works by accident,
+  // and stops working the moment block scoping is compiled faithfully.
+  const {
+    recycler, category, subCategory, quantity, unit, condition, sourceType,
+    collectionLat, collectionLng, collectionTs, photos = [], operatingArea,
+  } = route.params ?? {};
 
   useFocusEffect(
     useCallback(() => {
@@ -40,9 +53,9 @@ export default function AcceptScreen({ navigation, route, db, apiUrl }) {
       return await Linking.openURL(web);
     } catch (err) {
       log.accept.warn('directions failed', { message: err?.message });
-      Alert.alert('नकाशा उघडता आला नाही', web);
+      Alert.alert(t('accept_directions_failed_title'), web);
     }
-  }, [recycler]);
+  }, [recycler, t]);
 
   // Offline-safe: the share sheet needs no network, and this trade already runs
   // on WhatsApp, so sending the address is how a location actually travels.
@@ -54,14 +67,18 @@ export default function AcceptScreen({ navigation, route, db, apiUrl }) {
       log.accept.warn('share failed', { message: err?.message });
     }
   }, [recycler]);
-  const {
-    recycler, category, subCategory, quantity, unit, condition, sourceType,
-    collectionLat, collectionLng, collectionTs, photos = [], operatingArea,
-  } = route.params ?? {};
+
+  // Accepting used to play the 'good' clip, which is the recorded word for
+  // the GOOD *condition grade* — "चांगली". So confirming an acceptance
+  // announced a quality rating nobody had asked about. Say what happened.
+  const announceAccepted = useCallback(() => {
+    speak(t('voice_accepted'));
+  }, [speak, t]);
 
   const [done, setDone] = useState(false);
   const [pending, setPending] = useState(false);
   const [lotRef, setLotRef] = useState(null);
+  const [referenceCode, setReferenceCode] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const handleAccept = async () => {
@@ -113,8 +130,9 @@ export default function AcceptScreen({ navigation, route, db, apiUrl }) {
           if (resp.ok) {
             const data = await resp.json();
             log.accept.info('lot submitted via API', { lotId: data.lotId });
-            play('good').catch(() => {});
+            announceAccepted();
             setLotRef(data.lotId ?? lotId);
+            setReferenceCode(data.referenceCode ?? referenceCodeFromUuid(data.lotId ?? lotId));
             setPending(false);   // synced — no yellow pill
             setDone(true);
             return;
@@ -124,8 +142,9 @@ export default function AcceptScreen({ navigation, route, db, apiUrl }) {
           log.accept.warn('API submit failed (offline?)', fetchErr);
         }
         // Offline fallback — queue locally
-        play('good').catch(() => {});
+        announceAccepted();
         setLotRef(lotId);
+        setReferenceCode(referenceCodeFromUuid(lotId));
         setPending(true);
         setDone(true);
         return;
@@ -143,8 +162,9 @@ export default function AcceptScreen({ navigation, route, db, apiUrl }) {
       });
       log.accept.info('acceptance created', { lotId: lot.id, recyclerId: recycler.id, rate: recycler.rate });
 
-      play('good').catch(() => {});
+      announceAccepted();
       setLotRef(lot.id);
+      setReferenceCode(referenceCodeFromUuid(lot.id));
       setPending(true);
       setDone(true);
     } catch (err) {
@@ -156,40 +176,71 @@ export default function AcceptScreen({ navigation, route, db, apiUrl }) {
 
   if (done) {
     return (
-      <Screen style={styles.container}>
+      <Screen style={styles.doneScreen}>
+        <ScrollView
+          contentContainerStyle={styles.doneScroll}
+          showsVerticalScrollIndicator={false}
+        >
         <View style={styles.successCard}>
-          <Text style={styles.tick}>✅</Text>
-          <Text variant="xl" style={styles.successTitle}>स्वीकारले!</Text>
+          <Ionicons name="checkmark-circle" size={64} color={colors.primary} style={styles.tick} />
+          <Text variant="xl" style={styles.successTitle}>{t('accept_success_title')}</Text>
           <Text style={styles.successSub}>
-            {recycler?.name} ला कळवले जाईल.
+            {t('accept_will_notify', { name: recycler?.name })}
           </Text>
           {pending && (
             <View style={styles.pendingBadge}>
-              <Text variant="sm" style={styles.pendingText}>⟳ समक्रमण प्रलंबित</Text>
+              <Ionicons name="sync" size={13} color={colors.warning} />
+              <Text variant="sm" style={styles.pendingText}>{t('accept_sync_pending')}</Text>
             </View>
           )}
         </View>
 
+        {/* The QR the recycler scans at the gate.
+            It used to exist only on the Handover screen, which is reachable
+            only from a pending request — a screen that cannot appear until
+            the recycler has already inspected the lot, which they cannot do
+            until they have scanned this. The collector was told to travel
+            with nothing to show on arrival. It belongs here, at the moment
+            they are told to set off. */}
+        {referenceCode && (
+          <View style={styles.qrCard}>
+            <Text variant="sm" style={styles.qrCardLabel}>{t('accept_show_recycler')}</Text>
+            <View style={styles.qrFrame}>
+              <QRCode
+                value={referenceCode}
+                size={148}
+                color={colors.primary}
+                backgroundColor={colors.surface}
+              />
+            </View>
+            <Text variant="md" style={styles.qrCode}>{referenceCode}</Text>
+            <Text variant="sm" style={styles.qrHint}>
+              {t('accept_qr_fallback_hint')}
+            </Text>
+          </View>
+        )}
+
         {/* The most important sentence in the app */}
         <View style={styles.goNow}>
-          <Text variant="lg" style={styles.goNowText}>तुम्ही आत्ता जाऊ शकता.</Text>
+          <Text variant="lg" style={styles.goNowText}>{t('accept_go_now')}</Text>
           <Text variant="sm" style={styles.goNowSub}>
-            स्वीकृती म्हणजे परवानगी नाही — आत्ता जा.
+            {t('accept_go_now_sub')}
           </Text>
         </View>
 
         {hasLocation(recycler) && (
           <View style={styles.travelRow}>
-            <Button title="दिशा दाखवा" onPress={openDirections} style={styles.directionsBtn} />
-            <Button title="पत्ता पाठवा" onPress={shareLocation} style={styles.shareBtn} variant="ghost" />
+            <Button title={t('accept_directions')} onPress={openDirections} style={styles.directionsBtn} />
+            <Button title={t('accept_share_location')} onPress={shareLocation} style={styles.shareBtn} variant="ghost" />
           </View>
         )}
 
         <Button
-          title="मुख्यपृष्ठावर जा"
+          title={t('accept_go_home')}
           onPress={() => navigation.navigate('Main')}
           style={styles.homeBtn}
         />
+        </ScrollView>
       </Screen>
     );
   }
@@ -201,18 +252,24 @@ export default function AcceptScreen({ navigation, route, db, apiUrl }) {
       <View style={styles.card}>
         <Text variant="xl" style={styles.recyclerName}>{recycler?.name}</Text>
         {recycler?.distanceKm != null && (
-          <Text variant="sm" style={styles.detail}>📍 {recycler.distanceKm.toFixed(1)} किमी</Text>
+          <View style={styles.detailRow}>
+            <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
+            <Text variant="sm" style={styles.detail}>{t('accept_distance_km', { km: recycler.distanceKm.toFixed(1) })}</Text>
+          </View>
         )}
-        <Text style={styles.detail}>✓ अधिकृत</Text>
+        <View style={styles.detailRow}>
+          <Ionicons name="checkmark-circle-outline" size={14} color={colors.textSecondary} />
+          <Text style={styles.detail}>{t('authorized_label')}</Text>
+        </View>
       </View>
 
       <View style={styles.valueRow}>
-        <Text variant="sm" style={styles.valueLabel}>अंदाजे मूल्य</Text>
+        <Text variant="sm" style={styles.valueLabel}>{t('value_label')}</Text>
         <Text variant="3xl" style={styles.value}>
           ₹{Math.round(recycler?.estimatedValue ?? 0).toLocaleString('en-IN')}
         </Text>
         <Text variant="sm" style={styles.valueSub}>
-          {quantity} {unit === 'KG' ? t('quantity_kg') : t('quantity_pieces')} × ₹{recycler?.rate}/{unit === 'KG' ? t('quantity_kg') : t('quantity_pieces')}
+          {quantity} {unit === 'KG' ? t('quantity_kg') : t('quantity_pieces')}{' × ₹'}{recycler?.rate}/{unit === 'KG' ? t('quantity_kg') : t('quantity_pieces')}
         </Text>
       </View>
 
@@ -267,20 +324,37 @@ const styles = StyleSheet.create({
     marginBottom: spacing[4],
   },
   recyclerName: { fontWeight: '700', marginBottom: spacing[2] },
-  detail: { color: colors.textSecondary, marginTop: spacing[1] },
+  detailRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[1], marginTop: spacing[1] },
+  detail: { color: colors.textSecondary },
   valueRow: { alignItems: 'center', paddingVertical: spacing[6] },
   valueLabel: { color: colors.textSecondary, marginBottom: spacing[1] },
   value: { fontWeight: '800', color: colors.primary },
   valueSub: { color: colors.textSecondary, marginTop: spacing[1] },
   acceptBtn: { marginTop: spacing[4], minHeight: 56 },
   backBtn: { marginTop: spacing[2] },
-  successCard: {
-    flex: 1, alignItems: 'center', justifyContent: 'center',
+  doneScreen: { flex: 1, backgroundColor: colors.background, padding: 0 },
+  doneScroll: { padding: spacing[5], paddingBottom: spacing[10] },
+  successCard: { alignItems: 'center', paddingVertical: spacing[6] },
+  qrCard: {
+    backgroundColor: colors.surface, borderRadius: 16,
+    borderWidth: 1, borderColor: colors.border,
+    padding: spacing[4], alignItems: 'center', marginBottom: spacing[4],
   },
-  tick: { fontSize: 64, marginBottom: spacing[4] },
+  qrCardLabel: { color: colors.textSecondary, marginBottom: spacing[3] },
+  qrFrame: {
+    padding: spacing[3], backgroundColor: colors.surface,
+    borderRadius: 12, borderWidth: 2, borderColor: colors.primarySurface,
+  },
+  qrCode: {
+    marginTop: spacing[3], color: colors.primary, fontWeight: '800',
+    letterSpacing: 4, fontSize: 20,
+  },
+  qrHint: { color: colors.textSecondary, marginTop: spacing[1], textAlign: 'center' },
+  tick: { marginBottom: spacing[3] },
   successTitle: { fontWeight: '800', color: colors.primary },
   successSub: { color: colors.textSecondary, marginTop: spacing[2], textAlign: 'center' },
   pendingBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing[1],
     marginTop: spacing[3], backgroundColor: colors.warningSurface,
     paddingHorizontal: spacing[3], paddingVertical: spacing[1], borderRadius: 999,
   },
@@ -291,5 +365,5 @@ const styles = StyleSheet.create({
   },
   goNowText: { fontWeight: '700', color: colors.primary, textAlign: 'center' },
   goNowSub: { color: colors.textSecondary, marginTop: spacing[2], textAlign: 'center' },
-  homeBtn: {},
+  homeBtn: { marginTop: spacing[3] },
 });

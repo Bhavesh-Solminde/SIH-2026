@@ -55,6 +55,7 @@ module.exports = {
       testMatch: [
         "<rootDir>/test/audio/**/*.test.js",
         "<rootDir>/test/i18n/strings.test.js",
+        "<rootDir>/test/i18n/no-hardcoded-strings.test.js",
         "<rootDir>/test/lib/**/*.test.js",
       ],
       transform: {
@@ -170,10 +171,17 @@ module.exports = {
       ],
       testMatch: [
         "<rootDir>/test/i18n/useStrings.test.js",
+        "<rootDir>/test/i18n/LanguageContext.test.js",
         "<rootDir>/test/ui/**/*.test.js",
         "<rootDir>/test/components/**/*.test.js",
       ],
       testEnvironmentOptions: {},
+      // AsyncStorage's mock persists writes for the lifetime of a test FILE
+      // (module registries reset per-file, not per-test), so a language
+      // change persisted in one test otherwise leaks into the hydration
+      // effect of the next test's <LanguageProvider>. Clear it after every
+      // test — see the file for the full story.
+      setupFilesAfterEnv: ["<rootDir>/test/__mocks__/asyncStorageCleanup.js"],
       // No `transform` override here on purpose. jest-expo/android's own
       // preset (node_modules/jest-expo/jest-preset.js) already wires up its
       // own babel-jest transform for this project — an earlier attempt
@@ -204,6 +212,26 @@ module.exports = {
       ],
       moduleNameMapper: {
         "\\.(m4a|mp3|png|jpg)$": "<rootDir>/test/__mocks__/fileMock.js",
+        // @expo/vector-icons' barrel reaches expo-font's native module, and
+        // jest-expo/android's native-module lookup can't resolve it under the
+        // scoped `roots` above — it throws `The "path" argument must be of
+        // type string. Received undefined` at import time and takes the whole
+        // suite with it, whatever the test was actually asserting. The
+        // stand-in renders the icon name as a Text node, which is all these
+        // tests need (they assert on testIDs, not glyphs).
+        //
+        // Named explicitly rather than left in a `__mocks__` folder: an
+        // auto-discovered mock inside `roots` is the exact failure mode
+        // documented for test/__mocks__/react-native.js above.
+        "^@expo/vector-icons$": "<rootDir>/test/__mocks__/expoVectorIcons.js",
+        "^@expo/vector-icons/(.*)$": "<rootDir>/test/__mocks__/expoVectorIcons.js",
+        // AsyncStorage's real entry point (src/AsyncStorage.native.ts) reaches
+        // for the native module at import time, which is null under Jest —
+        // same class of failure as vector-icons above. LanguageContext.js
+        // needs a working AsyncStorage to test persistence against, so use
+        // the package's own official jest mock instead of skipping the test.
+        "^@react-native-async-storage/async-storage$":
+          "<rootDir>/node_modules/@react-native-async-storage/async-storage/jest/async-storage-mock.js",
       },
       moduleDirectories: ["node_modules"],
     },

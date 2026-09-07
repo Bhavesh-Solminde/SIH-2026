@@ -65,8 +65,8 @@ export default function RatesPage() {
       <main>
         <h1>{recycler.name} — Rates</h1>
         <AuthorisationPanel authorisation={authorisation} />
-        {msg && <p role="status" style={{ color: "green" }}>{msg}</p>}
-        {err && <p role="alert" style={{ color: "red" }}>{err}</p>}
+        {msg && <p role="status">{msg}</p>}
+        {err && <p role="alert">{err}</p>}
         <RateTable rows={rows} onPublish={publish} />
       </main>
     </>

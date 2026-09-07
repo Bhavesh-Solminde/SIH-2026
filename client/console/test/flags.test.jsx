@@ -20,7 +20,10 @@ vi.mock("../src/lib/api.js", () => ({
 // with "invariant expected app router to be mounted" before the component
 // under test even matters. Every sibling full-page test (e.g.
 // test/verify.test.jsx) already mocks it this same way. See final report.
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+// Nav also reads usePathname for its active-tab underline (added in the
+// design pass that consolidated the console's active-tab state) — mocked
+// the same way test/rates.test.jsx and test/verify.test.jsx already do.
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => "/flags" }));
 
 const { api } = await import("../src/lib/api.js");
 const FlagsPage = (await import("../src/app/(protected)/flags/page.jsx")).default;

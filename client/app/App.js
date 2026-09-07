@@ -15,15 +15,18 @@
  */
 
 import React, { useCallback, useEffect, useRef } from 'react';
+import Constants from 'expo-constants';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { StatusBar, AppState } from 'react-native';
+import { StatusBar, AppState, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { LanguageProvider } from './src/i18n/LanguageContext';
-import { colors } from './src/ui/tokens';
+import { useStrings } from './src/i18n/useStrings';
+import { LanguageSwitcher } from './src/components/LanguageSwitcher';
+import { colors, spacing } from './src/ui/tokens';
 
 // Tab screens
 import HomeScreen            from './src/screens/HomeScreen';
@@ -47,7 +50,20 @@ import SafetyScreen      from './src/screens/SafetyScreen';
 // Sync engine
 import { syncAndGetPending } from './src/screens/SyncEngine';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://192.168.0.102:4000';
+// The phone already knows this laptop's address — it reached the Expo dev server
+// over it — so derive the API host from that instead of hardcoding an IP.
+//
+// This matters because the demo runs over a phone hotspot, not USB, and a
+// hotspot hands out a different subnet (10.x) from office Wi-Fi (192.168.x).
+// Every hardcoded IP goes stale the moment the network changes, and the failure
+// is silent: the app just never reaches the server, while the API log shows only
+// 127.0.0.1 from the console and looks perfectly healthy.
+//
+// EXPO_PUBLIC_API_URL still wins when set, for a build pointed at a real host.
+const devHost = Constants.expoConfig?.hostUri?.split(':')[0];
+const API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_URL ??
+  (devHost ? `http://${devHost}:4000` : 'http://localhost:4000');
 
 const Stack = createStackNavigator();
 const Tab   = createBottomTabNavigator();
@@ -64,10 +80,23 @@ const TAB_ICON_NAMES = {
 const RequestsTab = (p) => <PendingRequestsScreen {...p} apiUrl={API_BASE_URL} />;
 const LotsTab     = (p) => <LotsScreen            {...p} apiUrl={API_BASE_URL} />;
 
+// The language switcher lives in every header (both navigators below) rather
+// than in one screen's body, so it's reachable no matter where the collector
+// is in the flow. headerRightContainerStyle nudges it off the screen edge —
+// React Navigation's default headerRight padding is tight for 3 pill buttons.
+function HeaderLanguageSwitcher() {
+  return (
+    <View style={{ paddingRight: spacing[3] }}>
+      <LanguageSwitcher />
+    </View>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Bottom tab navigator — always visible behind stack screens
 // ---------------------------------------------------------------------------
 function MainTabs({ db }) {
+  const t = useStrings();
   const HomeTab   = useCallback((p) => <HomeScreen       {...p} db={db} />, [db]);
   const LedgerTab = useCallback((p) => <LedgerScreen     {...p} db={db} apiUrl={API_BASE_URL} />, [db]);
   const RatesTab  = useCallback((p) => <PriceBoardScreen {...p} db={db} apiUrl={API_BASE_URL} />, [db]);
@@ -98,34 +127,97 @@ function MainTabs({ db }) {
         headerStyle:      { backgroundColor: colors.surface },
         headerTintColor:  colors.primary,
         headerTitleStyle: { fontWeight: '700' },
+        headerRight:      () => <HeaderLanguageSwitcher />,
       })}
     >
       <Tab.Screen
         name="Home"
         component={HomeTab}
-        options={{ title: 'नवीन', headerTitle: 'भाव संग्राहक' }}
+        options={{ title: t('nav_home'), headerTitle: t('nav_home_header') }}
       />
       <Tab.Screen
         name="Requests"
         component={RequestsTab}
-        options={{ title: 'विनंत्या', headerTitle: 'प्रलंबित विनंत्या' }}
+        options={{ title: t('nav_requests'), headerTitle: t('nav_requests_header') }}
       />
       <Tab.Screen
         name="Lots"
         component={LotsTab}
-        options={{ title: 'नोंदी', headerTitle: 'माझ्या नोंदी' }}
+        options={{ title: t('nav_lots'), headerTitle: t('nav_lots_header') }}
       />
       <Tab.Screen
         name="Ledger"
         component={LedgerTab}
-        options={{ title: 'कमाई', headerTitle: 'कमाई' }}
+        options={{ title: t('nav_ledger'), headerTitle: t('nav_ledger_header') }}
       />
       <Tab.Screen
         name="Rates"
         component={RatesTab}
-        options={{ title: 'दर', headerTitle: 'दर पत्रक' }}
+        options={{ title: t('nav_rates'), headerTitle: t('nav_rates_header') }}
       />
     </Tab.Navigator>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Root navigator — Stack over the tab shell. Rendered inside LanguageProvider
+// so it can call useStrings() for every screen title; App() itself sits above
+// the provider and cannot.
+// ---------------------------------------------------------------------------
+function AppNavigator({ db }) {
+  const t = useStrings();
+
+  const stackScreenOptions = {
+    headerStyle:      { backgroundColor: colors.surface },
+    headerTintColor:  colors.primary,
+    headerTitleStyle: { fontWeight: '700' },
+    cardStyle:        { backgroundColor: colors.background },
+    headerRight:      () => <HeaderLanguageSwitcher />,
+  };
+
+  return (
+    <NavigationContainer>
+      <Stack.Navigator screenOptions={stackScreenOptions}>
+        {/* Main shell — tabs always visible */}
+        <Stack.Screen name="Main" options={{ headerShown: false }}>
+          {() => <MainTabs db={db} />}
+        </Stack.Screen>
+
+        {/* Lot creation flow — pushed over tabs */}
+        <Stack.Screen name="Camera"      options={{ title: t('nav_camera') }}>
+          {(p) => <CameraScreen      {...p} db={db} />}
+        </Stack.Screen>
+        <Stack.Screen name="Category"    options={{ title: t('nav_category') }}>
+          {(p) => <CategoryScreen    {...p} db={db} />}
+        </Stack.Screen>
+        <Stack.Screen name="SubCategory" options={{ title: t('nav_subcategory') }}>
+          {(p) => <SubCategoryScreen {...p} db={db} />}
+        </Stack.Screen>
+        <Stack.Screen name="Quantity"    options={{ title: t('nav_quantity') }}>
+          {(p) => <QuantityScreen    {...p} db={db} />}
+        </Stack.Screen>
+        <Stack.Screen name="Condition"   options={{ title: t('nav_condition') }}>
+          {(p) => <ConditionScreen   {...p} db={db} />}
+        </Stack.Screen>
+        <Stack.Screen name="Source"      options={{ title: t('nav_source') }}>
+          {(p) => <SourceScreen      {...p} db={db} />}
+        </Stack.Screen>
+        <Stack.Screen name="Value"       options={{ title: t('nav_value') }}>
+          {(p) => <ValueScreen       {...p} db={db} apiUrl={API_BASE_URL} />}
+        </Stack.Screen>
+        <Stack.Screen name="Accept"      options={{ title: t('nav_accept') }}>
+          {(p) => <AcceptScreen      {...p} db={db} apiUrl={API_BASE_URL} />}
+        </Stack.Screen>
+
+        {/* Standalone full-screen flows */}
+        <Stack.Screen name="Handover" options={{ title: t('nav_handover') }}>
+          {(p) => <HandoverScreen {...p} db={db} apiUrl={API_BASE_URL} />}
+        </Stack.Screen>
+        <Stack.Screen name="Safety"   options={{ title: t('nav_safety') }}>
+          {(p) => <SafetyScreen   {...p} db={db} />}
+        </Stack.Screen>
+      </Stack.Navigator>
+    </NavigationContainer>
   );
 }
 
@@ -147,59 +239,11 @@ export default function App() {
     return () => sub.remove();
   }, []);
 
-  const stackScreenOptions = {
-    headerStyle:      { backgroundColor: colors.surface },
-    headerTintColor:  colors.primary,
-    headerTitleStyle: { fontWeight: '700' },
-    cardStyle:        { backgroundColor: colors.background },
-  };
-
   return (
     <SafeAreaProvider>
     <LanguageProvider>
       <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
-      <NavigationContainer>
-        <Stack.Navigator screenOptions={stackScreenOptions}>
-          {/* Main shell — tabs always visible */}
-          <Stack.Screen name="Main" options={{ headerShown: false }}>
-            {() => <MainTabs db={db} />}
-          </Stack.Screen>
-
-          {/* Lot creation flow — pushed over tabs */}
-          <Stack.Screen name="Camera"      options={{ title: 'फोटो घ्या' }}>
-            {(p) => <CameraScreen      {...p} db={db} />}
-          </Stack.Screen>
-          <Stack.Screen name="Category"    options={{ title: 'प्रकार' }}>
-            {(p) => <CategoryScreen    {...p} db={db} />}
-          </Stack.Screen>
-          <Stack.Screen name="SubCategory" options={{ title: 'उपप्रकार' }}>
-            {(p) => <SubCategoryScreen {...p} db={db} />}
-          </Stack.Screen>
-          <Stack.Screen name="Quantity"    options={{ title: 'प्रमाण' }}>
-            {(p) => <QuantityScreen    {...p} db={db} />}
-          </Stack.Screen>
-          <Stack.Screen name="Condition"   options={{ title: 'स्थिती' }}>
-            {(p) => <ConditionScreen   {...p} db={db} />}
-          </Stack.Screen>
-          <Stack.Screen name="Source"      options={{ title: 'स्रोत' }}>
-            {(p) => <SourceScreen      {...p} db={db} />}
-          </Stack.Screen>
-          <Stack.Screen name="Value"       options={{ title: 'अंदाजे मूल्य' }}>
-            {(p) => <ValueScreen       {...p} db={db} apiUrl={API_BASE_URL} />}
-          </Stack.Screen>
-          <Stack.Screen name="Accept"      options={{ title: 'स्वीकार' }}>
-            {(p) => <AcceptScreen      {...p} db={db} apiUrl={API_BASE_URL} />}
-          </Stack.Screen>
-
-          {/* Standalone full-screen flows */}
-          <Stack.Screen name="Handover" options={{ title: 'हस्तांतरण' }}>
-            {(p) => <HandoverScreen {...p} db={db} apiUrl={API_BASE_URL} />}
-          </Stack.Screen>
-          <Stack.Screen name="Safety"   options={{ title: 'सुरक्षा सूचना' }}>
-            {(p) => <SafetyScreen   {...p} db={db} />}
-          </Stack.Screen>
-        </Stack.Navigator>
-      </NavigationContainer>
+      <AppNavigator db={db} />
     </LanguageProvider>
     </SafeAreaProvider>
   );

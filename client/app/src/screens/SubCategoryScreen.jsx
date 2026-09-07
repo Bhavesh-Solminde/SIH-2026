@@ -1,6 +1,7 @@
 import React, { useCallback } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '../ui/Screen';
 import { Text } from '../ui/Text';
 import { useStrings } from '../i18n/useStrings';
@@ -13,11 +14,15 @@ import { colors, spacing } from '../ui/tokens';
  * Two large options + "I don't know" (always routes to the lower-value sub-type).
  */
 
+// `a` (the two answer options) stay English regardless of language by design
+// — these are widely recognised technical terms (e.g. "Laptop", "Inverter")
+// rather than translated UI copy, the same way category_crt keeps "CRT" in
+// its Marathi and Hindi forms. `qKey` resolves through the catalogue.
 const SUB_MAP = {
-  PCB:     { q: 'कोणता बोर्ड?',   a: ['Computer / Laptop', 'TV / Appliance'], codes: ['PCB_COMP', 'PCB_TV'],     unknown: 'PCB_TV' },
-  BATTERY: { q: 'कोणती बॅटरी?',   a: ['Phone / Laptop',   'Inverter / UPS'], codes: ['BAT_LIGHT','BAT_HEAVY'],  unknown: 'BAT_HEAVY' },
-  PANEL:   { q: 'कोणती स्क्रीन?', a: ['Laptop / Monitor', 'Television'],      codes: ['PNL_SMALL','PNL_TV'],     unknown: 'PNL_TV' },
-  MOTOR:   { q: 'कोणता भाग?',     a: ['Hard Disk',        'Fan / Pump Motor'],codes: ['MOT_HDD',  'MOT_FAN'],    unknown: 'MOT_FAN' },
+  PCB:     { qKey: 'subcat_q_pcb',     a: ['Computer / Laptop', 'TV / Appliance'], codes: ['PCB_COMP', 'PCB_TV'],     icons: ['laptop-outline', 'tv-outline'],           unknown: 'PCB_TV' },
+  BATTERY: { qKey: 'subcat_q_battery', a: ['Phone / Laptop',   'Inverter / UPS'], codes: ['BAT_LIGHT','BAT_HEAVY'],  icons: ['phone-portrait-outline', 'flash-outline'], unknown: 'BAT_HEAVY' },
+  PANEL:   { qKey: 'subcat_q_panel',   a: ['Laptop / Monitor', 'Television'],      codes: ['PNL_SMALL','PNL_TV'],     icons: ['laptop-outline', 'tv-outline'],           unknown: 'PNL_TV' },
+  MOTOR:   { qKey: 'subcat_q_motor',   a: ['Hard Disk',        'Fan / Pump Motor'],codes: ['MOT_HDD',  'MOT_FAN'],    icons: ['disc-outline', 'cog-outline'],            unknown: 'MOT_FAN' },
 };
 
 export default function SubCategoryScreen({ navigation, route }) {
@@ -44,7 +49,7 @@ export default function SubCategoryScreen({ navigation, route }) {
 
   return (
     <Screen style={styles.container}>
-      <Text variant="lg" style={styles.question}>{sub.q}</Text>
+      <Text variant="lg" style={styles.question}>{t(sub.qKey)}</Text>
 
       <View style={styles.options}>
         {sub.a.map((label, i) => (
@@ -53,9 +58,7 @@ export default function SubCategoryScreen({ navigation, route }) {
             style={styles.option}
             onPress={() => handleSelect(sub.codes[i])}
           >
-            <Text variant="2xl" style={styles.optionIcon}>
-              {i === 0 ? '🔧' : '📺'}
-            </Text>
+            <Ionicons name={sub.icons[i]} size={40} color={colors.primary} style={styles.optionIcon} />
             <Text variant="md" style={styles.optionLabel}>{label}</Text>
           </TouchableOpacity>
         ))}
@@ -66,7 +69,7 @@ export default function SubCategoryScreen({ navigation, route }) {
         style={styles.unknown}
         onPress={() => handleSelect(sub.unknown)}
       >
-        <Text style={styles.unknownText}>मला माहीत नाही</Text>
+        <Text style={styles.unknownText}>{t('subcat_unknown')}</Text>
       </TouchableOpacity>
     </Screen>
   );

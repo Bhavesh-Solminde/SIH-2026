@@ -19,7 +19,25 @@ const TABLES = [
   "recycler",
 ];
 
+// This TRUNCATEs every table and runs in beforeEach, so a full run empties the
+// target database ~146 times. That is correct against a throwaway local
+// database and catastrophic against a shared one, and nothing in the SQL can
+// tell the difference. The target is checked once, loudly, instead.
+function assertTruncatable() {
+  const url = process.env.DATABASE_URL ?? "";
+  const isLocal = /@(localhost|127\.0\.0\.1|\[::1\])[:/]/.test(url);
+  if (isLocal || process.env.BHAAV_ALLOW_REMOTE_TEST_DB === "1") return;
+  const host = url.replace(/^.*@/, "").replace(/[/?].*$/, "") || "(unset)";
+  throw new Error(
+    `Refusing to TRUNCATE a non-local database: ${host}\n` +
+    `The test suite empties every table before every test. If this really is a\n` +
+    `disposable database, set BHAAV_ALLOW_REMOTE_TEST_DB=1. Snapshot first with\n` +
+    `\`npm run db:backup\` — \`npm run db:restore\` puts it back.`,
+  );
+}
+
 export async function truncateAll() {
+  assertTruncatable();
   await prisma.$executeRawUnsafe(
     `TRUNCATE TABLE ${TABLES.map((t) => `"${t}"`).join(", ")} RESTART IDENTITY CASCADE`,
   );

@@ -245,7 +245,16 @@ publicRouter.post("/lots", async (req, res, next) => {
         });
     }
 
-    return res.status(201).json({ lotId, deviceId });
+    // The reference code travels back with the lot. It is derived from the
+    // lot id and is valid the moment the lot exists — the recycler scans it
+    // at the gate, long before any handover row is written — so the app must
+    // be able to render the QR immediately rather than waiting for an
+    // inspection that cannot happen until someone has scanned it.
+    return res.status(201).json({
+      lotId,
+      deviceId,
+      referenceCode: referenceCodeFromUuid(lotId),
+    });
   } catch (err) {
     log.req.error("POST /public/lots error", err);
     return next(err);
@@ -295,7 +304,13 @@ publicRouter.get("/lots", async (req, res, next) => {
         collectionLat:  l.collectionLat,
         collectionLng:  l.collectionLng,
         status,
-        referenceCode:  l.handover?.referenceCode ?? null,
+        // Always derivable from the lot id — never null. Reading it off the
+        // handover row meant every lot showed no reference code until after
+        // the recycler had inspected it, and the recycler cannot inspect a
+        // lot they have not been able to scan. The handover's stored code is
+        // preferred only because it is the authoritative persisted value;
+        // both are computed the same way from the same id.
+        referenceCode:  l.handover?.referenceCode ?? referenceCodeFromUuid(l.id),
         finalTotal:     l.handover?.finalTotal ? Number(l.handover.finalTotal) : null,
         recyclerName:   l.handover?.recycler?.name ?? null,
       };

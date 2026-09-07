@@ -2,6 +2,7 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text } from '../ui/Text.jsx';
 import { colors, spacing } from '../ui/tokens.js';
+import { useStrings } from '../i18n/useStrings.js';
 
 /**
  * AuthorisationPanel — the filtering, made visible.
@@ -23,6 +24,7 @@ import { colors, spacing } from '../ui/tokens.js';
  * anything that would block or hide the recycler list above/below it.
  */
 export function AuthorisationPanel({ authorisation }) {
+  const t = useStrings();
   if (!authorisation || !authorisation.listed) return null;
 
   const { listed, valid, lapsed, hiddenFromApp } = authorisation;
@@ -31,12 +33,11 @@ export function AuthorisationPanel({ authorisation }) {
   return (
     <View style={styles.container} testID="authorisation-panel">
       <Text variant="sm" style={styles.headline}>
-        MPCB यादीतील {listed} पैकी {valid} पुनर्वापरकर्ते सध्या अधिकृत आहेत —{' '}
-        {lapsed ?? hiddenFromApp} ची यादीतील मुदत संपली असून ते वगळले आहेत.
+        {t('auth_panel_headline', { listed, valid, lapsed: lapsed ?? hiddenFromApp })}
       </Text>
       {fetchedOn && (
         <Text variant="sm" style={styles.provenance}>
-          स्रोत: MPCB · यादी शेवटची अद्ययावत: {fetchedOn}
+          {t('auth_panel_provenance', { date: fetchedOn })}
         </Text>
       )}
     </View>

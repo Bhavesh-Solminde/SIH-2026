@@ -2,9 +2,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import HistoryPage from "../src/app/(protected)/history/page.jsx";
 
-// Mock navigation (used by Nav and useSession)
+// Mock navigation (used by Nav and useSession). Nav also reads usePathname
+// for its active-tab underline — omitting it throws "No usePathname export
+// is defined", same as useRouter/useSearchParams above it.
 const push = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push }), usePathname: () => "/history" }));
 
 // Mock api
 vi.mock("../src/lib/api.js", () => ({
@@ -19,30 +21,33 @@ vi.mock("../src/lib/useSession.js", () => ({
 
 const { api } = await import("../src/lib/api.js");
 
+// Shape matches the real server response — server/api/src/routes/recycler.js
+// GET /recycler/history returns { data, page, totalPages, total }, and each
+// row carries reference_code/category_name/inspected_quantity/final_total/
+// handover_ts/downgrade_reason_code, not the lot_ref/category/quantity/unit/
+// declared_condition/collector_estimate/agreed_price/date fields the page
+// (and this test) previously assumed — that mismatch meant the page never
+// rendered a single row against the real API. See history/page.jsx.
 const MOCK_HANDOVERS = [
   {
     id: "h1",
-    lot_ref: "LOT-2026-001",
-    category: "PCB",
-    quantity: 5,
-    unit: "KG",
-    declared_condition: "GOOD",
+    reference_code: "LOT-2026-001",
+    category_name: "PCB",
+    inspected_quantity: 5,
     inspected_condition: "GOOD",
-    collector_estimate: 2100,
-    agreed_price: 2000,
-    date: "2026-08-15T09:00:00+05:30",
+    downgrade_reason_code: null,
+    final_total: 2000,
+    handover_ts: "2026-08-15T09:00:00+05:30",
   },
   {
     id: "h2",
-    lot_ref: "LOT-2026-002",
-    category: "BATTERY",
-    quantity: 10,
-    unit: "KG",
-    declared_condition: "GOOD",
+    reference_code: "LOT-2026-002",
+    category_name: "BATTERY",
+    inspected_quantity: 10,
     inspected_condition: "FAIR",  // downgraded
-    collector_estimate: 800,
-    agreed_price: 600,
-    date: "2026-08-20T11:00:00+05:30",
+    downgrade_reason_code: "VISUAL_DAMAGE",
+    final_total: 600,
+    handover_ts: "2026-08-20T11:00:00+05:30",
   },
 ];
 
@@ -54,7 +59,7 @@ beforeEach(() => {
 
 describe("HistoryPage", () => {
   it("calls GET /recycler/history and renders the handover list", async () => {
-    api.get.mockResolvedValue({ handovers: MOCK_HANDOVERS, total: 2 });
+    api.get.mockResolvedValue({ data: MOCK_HANDOVERS, total: 2 });
     render(<HistoryPage />);
 
     await waitFor(() =>
@@ -65,8 +70,8 @@ describe("HistoryPage", () => {
     expect(screen.getByText("LOT-2026-002")).toBeInTheDocument();
   });
 
-  it("highlights rows where inspected_condition differs from declared_condition", async () => {
-    api.get.mockResolvedValue({ handovers: MOCK_HANDOVERS, total: 2 });
+  it("highlights rows with a non-null downgrade_reason_code", async () => {
+    api.get.mockResolvedValue({ data: MOCK_HANDOVERS, total: 2 });
     render(<HistoryPage />);
 
     await screen.findByText("LOT-2026-001");

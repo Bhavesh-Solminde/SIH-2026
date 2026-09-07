@@ -55,16 +55,22 @@ describe("GET /recycler/acceptances", () => {
 
     const res = await agent.get("/recycler/acceptances");
     expect(res.status).toBe(200);
-    expect(res.body.length).toBe(1);
+    // GET /recycler/acceptances answers
+    // { acceptances, readyToInspect, inactionMeans } — see recycler.js:164 and
+    // the console's useState shape at acceptances/page.jsx:14.
+    expect(res.body.acceptances.length).toBe(1);
 
-    const a = res.body[0];
+    // mapRow (recycler.js:142) flattens the lot into the acceptance row and
+    // uses camelCase — there is no nested a.lot.* object on the wire.
+    const a = res.body.acceptances[0];
     expect(a.id).toBe(acceptance.id);
-    expect(a.lot_id).toBe(lot.id);
-    expect(a.lot.category.code).toBe(category.code);
+    expect(a.lotId).toBe(lot.id);
+    expect(a.categoryCode).toBe(category.code);
 
-    // Collector is pseudonymous
-    expect(a.lot.collector.pseudonym).toBe(collector.id.slice(0, 8));
-    expect(a.lot.collector.pseudonym).not.toBe(collector.id);
+    // The collector reaches the recycler only as a truncated id: the console
+    // must never be able to reconstruct who this person is.
+    expect(a.collectorId).toBe(collector.id.slice(0, 8));
+    expect(a.collectorId).not.toBe(collector.id);
   });
 
   it("does not list already-responded acceptances", async () => {
@@ -79,7 +85,7 @@ describe("GET /recycler/acceptances", () => {
 
     const res = await agent.get("/recycler/acceptances");
     expect(res.status).toBe(200);
-    expect(res.body.length).toBe(0);
+    expect(res.body.acceptances.length).toBe(0);
   });
 
   it("returns 401 without session", async () => {

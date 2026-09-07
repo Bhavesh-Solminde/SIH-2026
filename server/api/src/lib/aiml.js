@@ -1,6 +1,23 @@
 import { log } from "./logger.js";
 
 /**
+ * Two ML services, two URLs. They are NOT interchangeable and a single
+ * AIML_URL cannot serve both:
+ *
+ *   PREDICT  — the deployed model, POST /predict. Single-transaction price
+ *              scoring. Fires automatically on every handover.
+ *   DETECT   — server/aiml (FastAPI), POST /detect. The eleven pattern
+ *              detectors from AI.md. Needs a whole history, not one row.
+ *
+ * Pointing both at one host silently 404s whichever route that host lacks,
+ * and the failure is invisible because both callers fail open.
+ */
+const PREDICT_BASE = () =>
+  process.env.AIML_PREDICT_URL ?? process.env.AIML_URL ?? "https://sihmodel.vercel.app";
+const DETECT_BASE = () =>
+  process.env.AIML_DETECT_URL ?? process.env.AIML_URL ?? null;
+
+/**
  * callPredict — calls the deployed Vercel ML model at /predict.
  *
  * Payload: { reference_price, buyer_offer_per_kg, final_price_per_kg, condition }
@@ -9,7 +26,7 @@ import { log } from "./logger.js";
  * FAIL-OPEN: errors return { ok: false } — caller must not block transactions.
  */
 export async function callPredict(payload, { url, timeoutMs } = {}) {
-  const base = url ?? process.env.AIML_URL ?? "https://sihmodel.vercel.app";
+  const base = url ?? PREDICT_BASE();
   const ms = Number(timeoutMs ?? process.env.AIML_TIMEOUT_MS ?? 4000);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
@@ -42,23 +59,26 @@ export async function callPredict(payload, { url, timeoutMs } = {}) {
 }
 
 /**
- * callDetect — legacy: calls the local Python /detect endpoint.
- * Kept for backward compatibility. New code should use callPredict.
+ * callDetect — calls server/aiml POST /detect, the eleven pattern detectors.
+ *
+ * This is the detector suite AI.md describes; it is NOT the same service as
+ * callPredict. FAIL-OPEN: a detector outage must never block a sale.
  */
-export async function callDetect(payload, { url = process.env.AIML_URL, timeoutMs } = {}) {
-  if (!url) {
-    log.aiml.warn("callDetect: AIML_URL not configured");
-    return { ok: false, reason: "AIML_URL is not configured" };
+export async function callDetect(payload, { url, timeoutMs } = {}) {
+  const base = url ?? DETECT_BASE();
+  if (!base) {
+    log.aiml.warn("callDetect: AIML_DETECT_URL not configured");
+    return { ok: false, reason: "AIML_DETECT_URL is not configured" };
   }
 
   const ms = Number(timeoutMs ?? process.env.AIML_TIMEOUT_MS ?? 2000);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
 
-  log.aiml.debug("callDetect →", { url: `${url}/detect` });
+  log.aiml.debug("callDetect →", { url: `${base}/detect` });
 
   try {
-    const res = await fetch(`${url}/detect`, {
+    const res = await fetch(`${base}/detect`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(payload),

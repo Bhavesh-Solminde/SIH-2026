@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet } from 'react-native';
 import { Text } from '../ui/Text.jsx';
 import { colors } from '../ui/tokens.js';
+import { useStrings } from '../i18n/useStrings.js';
 
 /**
  * RecyclerAuthBadge — per-row authorisation evidence.
@@ -17,10 +18,11 @@ import { colors } from '../ui/tokens.js';
  * rather than rendering a broken or misleading badge.
  */
 export function RecyclerAuthBadge({ registrationNo, validityTo }) {
+  const t = useStrings();
   if (!registrationNo || !validityTo) {
     return (
       <Text variant="sm" style={styles.chip} testID="auth-badge-fallback">
-        ✓ अधिकृत
+        {'✓ '}{t('authorized_label')}
       </Text>
     );
   }
@@ -29,7 +31,7 @@ export function RecyclerAuthBadge({ registrationNo, validityTo }) {
 
   return (
     <Text variant="sm" style={styles.chip} testID="auth-badge">
-      ✓ MPCB #{registrationNo} · वैध पर्यंत {validDate}
+      {'✓ MPCB #'}{registrationNo} · {t('auth_valid_until', { date: validDate })}
     </Text>
   );
 }

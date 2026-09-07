@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Nav from "../../../components/Nav.jsx";
 import FlagCard from "../../../components/FlagCard.jsx";
+import Icon from "../../../components/Icon.jsx";
 import { useSession } from "../../../lib/useSession.js";
 import { api } from "../../../lib/api.js";
 
@@ -75,7 +76,7 @@ export default function FlagsPage() {
         )}
 
         {flags.length === 0 && (
-          <p>No flags — all clear</p>
+          <p className="empty-state"><Icon name="check-circle" color="var(--c-primary)" /> No flags — all clear</p>
         )}
 
         {flags.length > 0 && (
