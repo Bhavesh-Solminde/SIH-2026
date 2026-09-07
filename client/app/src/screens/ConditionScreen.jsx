@@ -1,12 +1,13 @@
 import React, { useCallback } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '../ui/Screen';
 import { Text } from '../ui/Text';
 import { useStrings } from '../i18n/useStrings';
 import { play } from '../audio';
 import { useVoice } from '../hooks/useVoice';
-import { colors, spacing } from '../ui/tokens';
+import { colors, spacing, conditionColors } from '../ui/tokens';
 
 /**
  * S4b — Condition
@@ -16,9 +17,9 @@ import { colors, spacing } from '../ui/tokens';
  */
 
 const CONDITIONS = [
-  { value: 'GOOD', icon: '✅', bg: colors.primarySurface, border: colors.primaryLight, clip: 'good' },
-  { value: 'FAIR', icon: '⚠️', bg: '#FFF8E1',              border: '#FFB300',           clip: 'fair' },
-  { value: 'POOR', icon: '❌', bg: colors.dangerSurface,   border: colors.dangerLight,  clip: 'poor' },
+  { value: 'GOOD', icon: 'checkmark-circle', bg: conditionColors.GOOD.bg, border: colors.primaryLight,  iconColor: colors.primary, clip: 'good' },
+  { value: 'FAIR', icon: 'warning',          bg: conditionColors.FAIR.bg, border: colors.warningLight,  iconColor: colors.warningLight, clip: 'fair' },
+  { value: 'POOR', icon: 'close-circle',     bg: conditionColors.POOR.bg, border: colors.dangerLight,   iconColor: colors.danger, clip: 'poor' },
 ];
 
 export default function ConditionScreen({ navigation, route }) {
@@ -45,14 +46,14 @@ export default function ConditionScreen({ navigation, route }) {
       </Text>
 
       <View style={styles.buttons}>
-        {CONDITIONS.map(({ value, icon, bg, border, clip }) => (
+        {CONDITIONS.map(({ value, icon, bg, border, iconColor, clip }) => (
           <TouchableOpacity
             key={value}
             style={[styles.btn, { backgroundColor: bg, borderColor: border }]}
             onPress={() => handleSelect(value, clip)}
             accessibilityLabel={t(`condition_${value.toLowerCase()}`)}
           >
-            <Text style={styles.icon}>{icon}</Text>
+            <Ionicons name={icon} size={36} color={iconColor} style={styles.icon} />
             <Text variant="xl" style={styles.btnLabel}>
               {t(`condition_${value.toLowerCase()}`)}
             </Text>
@@ -73,7 +74,7 @@ const styles = StyleSheet.create({
     flex: 1, borderRadius: 16, borderWidth: 2,
     alignItems: 'center', justifyContent: 'center', padding: spacing[4],
   },
-  icon: { fontSize: 36, lineHeight: 44, marginBottom: spacing[2] },
+  icon: { marginBottom: spacing[2] },
   btnLabel: { fontWeight: '700' },
   btnSub: { color: colors.textSecondary, marginTop: spacing[1] },
 });

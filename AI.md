@@ -44,7 +44,7 @@ The brief names four AI/ML features. Be precise about which are models and which
 | Material classification | Icon grid + conditional picture question | **Human input.** Not a model, by choice |
 | Approximate valuation | `quantity × rate` from the cached rate table | **Lookup.** A regression on eleven observations would be pretending |
 | Recycler matching | Weighted score over rate, distance, materials accepted, pickup, authorisation status | **Rule-based ranking.** Explainable, and correct for the job |
-| Abnormal / inconsistent transaction values | Seven detectors in scope — D1, D2, D3, D6, D7, D8, D9 | **Statistical rules now, learned thresholds once history exists** |
+| Abnormal / inconsistent transaction values | Eleven detectors in scope — D1, D2, D3, D6, D7, D8, D9, D10, D11, D12, D13. D4 and D5 are registered but permanently skip (blocked on per-category weight/value distributions that do not exist); D14 was never built | **Statistical rules now, learned thresholds once history exists** |
 | Price trends | Time series over the append-only `rate` table | **Charting.** Not prediction |
 | Price *prediction* | Not shipped | Requires a history we will not have for months |
 
@@ -136,7 +136,9 @@ The brief requires this table explicitly. **Put it in the deck verbatim.**
 
 ## 5. The anomaly detectors
 
-Nine detectors. Each has a subject, a rule, a threshold, a minimum-data precondition, and a stated false-positive risk. **Preconditions matter: some work on the first transaction, some do not work until there is history.** Never show a detector firing on data too thin to support it.
+Thirteen detectors are defined; **eleven are built and in scope** — D1, D2, D3, D6, D7, D8, D9, D10, D11, D12, D13 (`server/aiml/bhaav_aiml/config.py::IN_SCOPE`). D4 and D5 are registered in the detector code but **permanently skip with a reason** — both are blocked on real per-category weight/value distributions that do not exist (open item 7); they are not "not yet run", they will never run in this build. D14 (evidence-photo reuse) was never built — see `AI-ANOMALY-SPEC.md` §6.3.
+
+Each has a subject, a rule, a threshold, a minimum-data precondition, and a stated false-positive risk. **Preconditions matter: some work on the first transaction, some do not work until there is history.** Never show a detector firing on data too thin to support it.
 
 Let `P_est` = estimate the collector saw, `P_pub` = published rate frozen at acceptance, `P_final` = amount actually paid and confirmed by both parties.
 
@@ -151,6 +153,10 @@ Let `P_est` = estimate the collector saw, `P_pub` = published rate frozen at acc
 | **D7** | Impossible travel | Handover | `distance(collection, handover) / (t_handover − t_collection)` | `> 80 km/h` | 1 | Fabricated provenance | Low. Tune for highway travel |
 | **D8** | Clustered handovers | Recycler | ≥ 5 handovers within 60s at coordinates inside a 10 m radius | — | 1 | Bulk-fabricated records | Low |
 | **D9** | Grader bias | Recycler | `mean` over shared collectors of `(downgrade rate this recycler − downgrade rate other recyclers, same collector)` | `bias > 0.35` → `WARN`; `> 0.60` at n≥20 → `CRITICAL` | **≥ 10 collectors shared with another recycler, each sold to ≥ 2 recyclers** | A recycler who declares material POOR to justify a price cut regardless of the collector's actual quality — where D1/D2 alone cannot separate this from a recycler who genuinely, consistently receives poor-quality material | **Low where overlap exists.** Two recyclers under common ownership (shared address/phone) are one grader in two hats and will falsely clean each other's bias score — flag shared ownership as a confidence caveat in `detail`. **Unidentifiable, not just noisy, with no shared collectors** — must skip with a reason, never guess |
+| **D10** | Downgrade change-point | Recycler | Split a recycler's own dated handovers at the midpoint of their active window; compare the downgrade rate before vs after | `step ≥ 0.30` (absolute rise in downgrade rate) → `WARN` | **≥ 60 days span, ≥ 20 handovers, ≥ 8 per window** | A recycler who was honest, then flips policy — the step in rate is the tell, not the level | **Blind to anyone who lied from day one** — their rate never steps because it was always high. D11 and D12 cover that case |
+| **D11** | Cross-category downgrade uniformity | Recycler | Variance of downgrade rate across a recycler's own categories | `variance ≤ 0.02` at `mean ≥ 0.60` → `WARN` | **≥ 3 categories, ≥ 10 handovers each** | Uniform downgrading across materially different categories — genuine quality problems are category-specific; lying is uniform | A recycler who genuinely, coincidentally, receives poor material across every category they handle (rare but possible) |
+| **D12** | Offers that never learn | Recycler | A persistent published-vs-paid gap **AND** a published rate that has not meaningfully fallen, evaluated together | `mean_drop ≥ 0.20` **and** `rate_fall < 0.15` over the window → `WARN` | **≥ 15 handovers over ≥ 30 days** | A recycler whose published rate stays high (to keep winning lots) while consistently paying much less. The two-condition **AND** is deliberate: an honest low-grade recycler lowers their own published rate and is exonerated; a liar cannot lower theirs without losing the lot | **Low** — the conjunction is specifically what separates the honest low-grade recycler from the liar; either condition alone would catch the honest case too |
+| **D13** | Single-buyer market | `MARKET` (not a person) | A district has exactly one currently-valid recycler and a high downgrade rate | `downgrade_rate ≥ 0.60` → `MARKET` finding | **≥ 20 handovers** | Recognises that recycler bias is mathematically unidentifiable with no second recycler to compare against — flags the market structure, not a person | None by construction — this is a finding about market structure, never an accusation against a business |
 
 **D9 needs data the schema does not yet capture.** `lot.condition` is the collector's declaration at creation; nothing today records what the recycler inspected it as at handover. `handover` needs `inspected_condition` (`GOOD`/`FAIR`/`POOR`) and `downgrade_reason_code`, or D9 has nothing to compute over.
 
@@ -203,8 +209,8 @@ Because no identifiable personal data is collected, most DPDP Act 2023 obligatio
 | Historical price analysis / trends | **Working** (charting) | ~30 rate observations |
 | Anomaly detection D1, D6, D7, D8 | **Working** (thresholds) | Day one |
 | Anomaly detection D2, D3 | Defined, not validated | 10–30 records per subject |
-| Anomaly detection D9 | Defined, not validated | ≥ 10 collectors shared across recyclers, plus `handover.inspected_condition` (not yet in schema) |
-| Anomaly detection D4, D5 | **Out of scope for this build** | Blocked on real per-category weight/price distributions (open item 7) |
+| Anomaly detection D9, D10, D11, D12, D13 | **Built.** `handover.inspected_condition`/`downgrade_reason_code` are now schema columns (`DB.md` §3.7). Exercised against simulated adversarial recycler profiles via `bhaav_aiml/evaluate.py` — recall 1.0, precision 1.0 on the three planted bad actors (systematic liar, late-onset liar, monopolist) — but **not yet validated against real transaction history** | D9 needs ≥ 10 collectors shared across recyclers; D10 needs ≥ 60 days/≥ 20 handovers; D11 needs ≥ 3 categories; D12 needs ≥ 15 handovers/≥ 30 days; D13 needs ≥ 20 handovers in a single-recycler district |
+| Anomaly detection D4, D5 | **Out of scope for this build, permanently** | Blocked on real per-category weight/price distributions (open item 7). They are registered detector codes that always skip with a reason, not detectors pending activation |
 | Material classification | **Not shipped** | ~500 labelled images/class from real use |
 | Price prediction | **Not shipped** | Months of per-category, per-location series |
 
@@ -226,7 +232,7 @@ There is no labelled set of "true frauds," so accuracy cannot be reported. Two d
 ## 9. Known limitations — say these before a judge finds them
 
 1. **No trained model ships at the internal round.** Detectors are rules with tuned thresholds.
-2. **Four of eight detectors cannot be validated** with the data available; they are specified and demonstrated on simulated history.
+2. **Seven of eleven in-scope detectors (D2, D3, D9, D10, D11, D12, D13) cannot be validated against real transaction history** — there isn't enough of it yet. They are specified, implemented, and demonstrated against simulated adversarial profiles instead (`bhaav_aiml/evaluate.py`: recall 1.0, precision 1.0 on the three planted bad actors). D1, D6, D7, D8 work from the first real transaction.
 3. **The price dataset is small and non-representative** — one city, one week, a handful of respondents.
 4. **Weight-based detectors depend on distributions we do not yet have**, which must come from real field data, not assumption.
 5. **GPS can be spoofed and photographs can be reused.** The record is not tamper-proof. What it does is make fabrication *expensive and detectable at scale* — you would need a distinct photo, a plausible place, a consistent time and a second party's confirmation for every lot. Today the first mile has none of those, which is how a certificate market ends up with claims at many multiples of actual capacity.
@@ -236,19 +242,19 @@ There is no labelled set of "true frauds," so accuracy cannot be reported. Two d
 
 ## 10. Build order
 
-**In scope: D1, D2, D3, D6, D7, D8, D9. D4 and D5 are not being built** — both are blocked on real per-category weight/price distributions that do not exist yet (open item 7); they stay specified, not implemented, and the deck says so.
+> **This section is the original build plan and is now historical — all of steps 1–7 below are done.** The finished scope is **eleven detectors: D1, D2, D3, D6, D7, D8, D9, D10, D11, D12, D13** (`AI-ANOMALY-SPEC.md` §6.3 added D10–D13 after this plan was written). **D4 and D5 remain permanently out of scope** — both are blocked on real per-category weight/price distributions that do not exist (open item 7); they stay specified, not implemented, and the deck says so.
 
-1. Define the seven in-scope detectors as pure functions over the transaction tables — no ML dependency, no framework
-2. Simulated-history generator with injectable anomalies, including labelled recycler archetypes (honest, honest-but-genuinely-low-grade, systematic liar) so D9 has something to separate
-3. D1, D6, D7, D8 (work from the first transaction)
-4. Flags screen in the recycler console with plain-language reasons
-5. Rate-trend chart from the append-only `rate` table
-6. D2, D3 (need history — run against simulated data for the demo)
-7. D9 (needs `handover.inspected_condition` + `downgrade_reason_code` added to the schema first, and ≥ 10 collectors shared across recyclers in the simulated data)
-7. Populate `expected_weight_min/max` from field data → D4, D5
-8. Image corpus accumulation with labels — collect, do not train
+1. ~~Define the seven in-scope detectors as pure functions over the transaction tables~~ — done; eleven detectors now, no ML dependency, no framework
+2. ~~Simulated-history generator with injectable anomalies~~ — done, including the five labelled recycler archetypes (`honest`, `honest_low_grade`, `systematic_liar`, `late_onset_liar`, `monopolist`) needed to separate D9/D10/D12/D13
+3. ~~D1, D6, D7, D8~~ — done, work from the first transaction
+4. ~~Flags screen in the recycler console with plain-language reasons~~ — done, plus an operator-triggered "Run detection" button
+5. ~~Rate-trend chart from the append-only `rate` table~~ — the simulator now emits a dated rate series; charting itself is a console concern
+6. ~~D2, D3~~ — done, run against simulated data; D3 needed the dated rate series to be reachable at all
+7. ~~D9~~ — done. `handover.inspected_condition` and `downgrade_reason_code` are schema columns; **D10, D11, D12, D13 also shipped**, beyond what this plan originally scoped
+8. Populate `expected_weight_min/max` from field data → D4, D5 — **still open, still blocks D4/D5 permanently**
+9. Image corpus accumulation with labels — collect, do not train — **still open, unchanged**
 
-**If time is short, ship 1–4 and the honest table in §7.** Four working, explainable detectors plus a clear statement of what the data does not yet support beats eight half-implemented ones.
+**Detection now fires automatically** after every confirmed handover (fail-open, un-awaited — a detector-service outage never blocks a sale) and can also be triggered on demand from the console's flags page. `GET /recycler/flags` excludes `INFO` severity by default (`?includeInfo=1` returns all) because D1 alone fires on roughly a third of handovers against a 5% alert budget — the budget is enforced at the presentation boundary, not by raising the threshold.
 
 ---
 
@@ -274,7 +280,7 @@ The AI service is owned by a different person from the API. This contract is the
 ### `GET /health`
 
 ```json
-{ "status": "ok", "detectors": ["D1","D2","D3","D6","D7","D8","D9"] }
+{ "status": "ok", "detectors": ["D1","D2","D3","D6","D7","D8","D9","D10","D11","D12","D13"] }
 ```
 
 ### `POST /detect`
@@ -340,3 +346,19 @@ Generates labelled synthetic history so the detectors can be exercised and evalu
 Returns the same shape as the `/detect` request body, plus `ground_truth[]` listing every injected anomaly — which is what makes the recall figures in §8 computable.
 
 > **Everything produced by `/simulate` must be labelled simulated on screen and in the deck.** Presenting synthetic transactions as real is the fastest way to lose on integrity rather than on merit.
+
+---
+
+## 12. A second model this document has never described — `POST /predict`
+
+Everything above (§11) is the pattern-detector contract with `server/aiml`, reached via `callDetect()`. There is a **second, separate, already-deployed** ML integration that no document mentions until now: `callPredict()` in `server/api/src/lib/aiml.js`, which calls `POST {AIML_PREDICT_URL ?? "https://sihmodel.vercel.app"}/predict` automatically from `scoreHandover()` after every confirmed handover.
+
+**These are two different services and must never be pointed at the same host** — `aiml.js` itself carries a comment warning that doing so silently 404s whichever route the host lacks, invisibly, because both callers fail open.
+
+- **Payload:** `{ reference_price, buyer_offer_per_kg, final_price_per_kg, condition }`.
+- **Response:** `{ anomaly, score, threshold, risk_level, features }`.
+- **The payload was degenerate until today.** `reference_price` and `buyer_offer_per_kg` were sent as the *same* number (`acceptance.acceptedRate`), which pinned `buyer_reference_ratio` at a constant `1.0` and collapsed `negotiation_gap_pct` into a duplicate of `abs_price_deviation_pct` — two of the model's five features carried zero incremental information. Fixed: `reference_price` is now the median published rate among the *other* `VALID` recyclers in that category — a real market reference, independent of what this recycler is paying.
+
+**An open honesty question — not resolved here.** `README.md` ground rule 3 says "we trained no model," and `AI-ANOMALY-SPEC.md` §0.1 explicitly rejected a hybrid Isolation Forest for the pattern-detector side of this project. The response shape from `sihmodel.vercel.app` — a continuous `score` compared against a fixed `threshold` — is consistent with a trained model's `decision_function` output (e.g. an sklearn `IsolationForest`). **This is an inference from the response shape, not a confirmed fact.** Whoever built and deployed that model needs to confirm, one way or the other, before the deck says either "we trained no model" (if it turns out this one is trained) or claims it as a trained-model result (if it is not). Do not state either in the deck until that confirmation exists.
+
+**DLT sender-ID registration** for outbound SMS (`server/api/src/lib/sms.js`) is a separate, unrelated open item — see `SERVER.md` §6.1. It is the production path for SMS and is out of scope for the internal round.

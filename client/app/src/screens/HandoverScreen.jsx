@@ -7,7 +7,6 @@ import { Text } from '../ui/Text';
 import { Button } from '../ui/Button';
 import { useStrings } from '../i18n/useStrings';
 import { useFocusEffect } from '@react-navigation/native';
-import { play, composeNumber } from '../audio';
 import { useVoice } from '../hooks/useVoice';
 import { colors, spacing } from '../ui/tokens';
 import { getLot } from '../db/repos/lots';
@@ -24,7 +23,7 @@ const PHASES = { QR: 'qr', CONFIRM: 'confirm', DONE: 'done' };
 
 export default function HandoverScreen({ navigation, route, db, apiUrl }) {
   const t = useStrings();
-  const { speak } = useVoice();
+  const { speak, speakNumber } = useVoice();
   const {
     lotId, referenceCode, finalTotal, handoverId,
     // params passed from PendingRequestsScreen (API-only mode)
@@ -38,6 +37,7 @@ export default function HandoverScreen({ navigation, route, db, apiUrl }) {
   );
 
   const [phase, setPhase] = useState(PHASES.QR);
+  const [disputed, setDisputed] = useState(false);
   const [lot, setLot] = useState(null);
   const [finalAmount, setFinalAmount] = useState(finalTotal ?? null);
 
@@ -47,13 +47,15 @@ export default function HandoverScreen({ navigation, route, db, apiUrl }) {
     getLot(db, lotId).then(setLot).catch((err) => log.handover.warn('getLot failed', err));
   }, [db, lotId]);
 
+  // Read the amount out digit by digit, one clip at a time. The old call
+  // fired every clip in the same tick, so "one thousand three hundred" came
+  // out as four words layered on top of each other.
   useEffect(() => {
     if (phase === PHASES.CONFIRM && finalAmount) {
       log.handover.info('entering confirm phase', { finalAmount });
-      const n = Math.round(Number(finalAmount));
-      composeNumber(n).forEach((clip) => play(clip).catch(() => {}));
+      speakNumber(Math.round(Number(finalAmount)));
     }
-  }, [phase, finalAmount]);
+  }, [phase, finalAmount, speakNumber]);
 
   const handleCorrect = async () => {
     log.handover.info('collector agreed', { lotId, finalAmount });
@@ -68,22 +70,37 @@ export default function HandoverScreen({ navigation, route, db, apiUrl }) {
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
       }
-      play('good').catch(() => {});
+      speak(t('handover_confirmed'));
       setPhase(PHASES.DONE);
     } catch (err) {
       log.handover.error('confirm failed', err);
     }
   };
 
+  // Disagreeing used to write only to a local database this build never
+  // opens, so pressing "चूक" recorded nothing and moved straight to a screen
+  // reading "पुष्टी झाली" — the collector was shown a confirmation for a
+  // price they had just rejected. It now posts the protest and says so.
   const handleWrong = async () => {
     log.handover.warn('collector disputed', { lotId, finalAmount });
+    setDisputed(true);
     try {
       if (db && lotId) {
         await confirmHandover(db, { lotId, agree: false, protest: true });
+      } else if (apiUrl && lotId) {
+        const res = await fetch(`${apiUrl}/handover/${lotId}/dispute`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
       }
+      speak(t('voice_dispute_recorded'));
       setPhase(PHASES.DONE);
     } catch (err) {
       log.handover.error('dispute failed', err);
+      speak(t('voice_error_generic'));
+      setDisputed(false);
     }
   };
 
@@ -91,14 +108,26 @@ export default function HandoverScreen({ navigation, route, db, apiUrl }) {
     return (
       <Screen style={styles.container}>
         <View style={styles.doneCard}>
-          <Ionicons name="checkmark-circle" size={72} color={colors.primary} style={styles.doneIconView} />
-          <Text variant="xl" style={styles.doneTitle}>{t('handover_confirmed')}</Text>
-          <Text style={styles.doneSub}>संदर्भ: {referenceCode}</Text>
-          <Text variant="lg" style={styles.doneAmount}>
+          <Ionicons
+            name={disputed ? 'alert-circle' : 'checkmark-circle'}
+            size={72}
+            color={disputed ? colors.danger : colors.primary}
+            style={styles.doneIconView}
+          />
+          <Text variant="xl" style={disputed ? styles.disputeTitle : styles.doneTitle}>
+            {disputed ? t('handover_disputed_title') : t('handover_confirmed')}
+          </Text>
+          <Text style={styles.doneSub}>{t('requests_reference', { code: referenceCode })}</Text>
+          <Text variant="lg" style={disputed ? styles.disputeAmount : styles.doneAmount}>
             ₹{Math.round(Number(finalAmount ?? 0)).toLocaleString('en-IN')}
           </Text>
+          {disputed && (
+            <Text variant="sm" style={styles.disputeNote}>
+              {t('handover_dispute_note')}
+            </Text>
+          )}
         </View>
-        <Button title="मुख्यपृष्ठावर जा" onPress={() => navigation.navigate('Home')} />
+        <Button title={t('accept_go_home')} onPress={() => navigation.navigate('Home')} />
       </Screen>
     );
   }
@@ -107,23 +136,23 @@ export default function HandoverScreen({ navigation, route, db, apiUrl }) {
     return (
       <Screen style={styles.container}>
         <View style={styles.confirmCard}>
-          <Text variant="sm" style={styles.confirmLabel}>नोंदवलेली रक्कम</Text>
+          <Text variant="sm" style={styles.confirmLabel}>{t('handover_recorded_amount')}</Text>
           <Text variant="3xl" style={styles.confirmAmount}>
             ₹{Math.round(Number(finalAmount ?? 0)).toLocaleString('en-IN')}
           </Text>
           <Text variant="sm" style={styles.confirmSub}>
-            ही रक्कम बरोबर आहे का?
+            {t('handover_confirm_question')}
           </Text>
         </View>
 
         <View style={styles.confirmButtons}>
           <TouchableOpacity style={[styles.confirmBtn, styles.correctBtn]} onPress={handleCorrect}>
             <Ionicons name="checkmark-circle" size={28} color={colors.primary} />
-            <Text style={styles.correctText}>बरोबर</Text>
+            <Text style={styles.correctText}>{t('handover_correct')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.confirmBtn, styles.wrongBtn]} onPress={handleWrong}>
             <Ionicons name="close-circle" size={28} color={colors.danger} />
-            <Text style={styles.wrongText}>चूक</Text>
+            <Text style={styles.wrongText}>{t('handover_wrong')}</Text>
           </TouchableOpacity>
         </View>
       </Screen>
@@ -156,7 +185,7 @@ export default function HandoverScreen({ navigation, route, db, apiUrl }) {
         />
         <Text variant="md" style={styles.qrRef}>{referenceCode ?? '—'}</Text>
         <Text variant="sm" style={styles.qrHint}>
-          हे QR स्कॅन करा किंवा संदर्भ कोड सांगा
+          {t('handover_qr_hint')}
         </Text>
       </View>
 
@@ -186,7 +215,7 @@ export default function HandoverScreen({ navigation, route, db, apiUrl }) {
 
       {finalAmount && (
         <Button
-          title={`रक्कम तपासा: ₹${Math.round(Number(finalAmount))}`}
+          title={t('handover_check_amount', { amount: Math.round(Number(finalAmount)) })}
           onPress={() => setPhase(PHASES.CONFIRM)}
           style={styles.checkBtn}
         />
@@ -233,4 +262,7 @@ const styles = StyleSheet.create({
   doneTitle: { fontWeight: '800', color: colors.primary },
   doneSub: { color: colors.textSecondary, marginTop: spacing[2] },
   doneAmount: { fontWeight: '700', color: colors.primary, marginTop: spacing[4] },
+  disputeTitle: { fontWeight: '800', color: colors.danger },
+  disputeAmount: { fontWeight: '700', color: colors.danger, marginTop: spacing[4] },
+  disputeNote: { color: colors.textSecondary, marginTop: spacing[3], textAlign: 'center' },
 });

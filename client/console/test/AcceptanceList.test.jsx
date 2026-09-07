@@ -28,17 +28,23 @@ describe("AcceptanceList", () => {
     expect(screen.queryByText(/phone/i)).not.toBeInTheDocument();
   });
 
+  // AcceptanceList.jsx:19,22 send the "ACCEPT"/"REJECT" action verbs the API
+  // expects on POST /recycler/acceptances/:id/respond (server/api/src/routes/
+  // recycler.js:170 documents the endpoint as `{ action: "ACCEPT"|"REJECT" }`).
+  // Those values replaced the old "ACKNOWLEDGED"/"DECLINED" state names in
+  // commit 2ac75d4 — this test was never updated to match and was asserting
+  // the pre-fix behaviour.
   it("acknowledges a row", () => {
     const onRespond = vi.fn();
     render(<AcceptanceList rows={ROWS} onRespond={onRespond} />);
     fireEvent.click(screen.getByRole("button", { name: /acknowledge/i }));
-    expect(onRespond).toHaveBeenCalledWith("a1", "ACKNOWLEDGED");
+    expect(onRespond).toHaveBeenCalledWith("a1", "ACCEPT");
   });
 
   it("declines a row", () => {
     const onRespond = vi.fn();
     render(<AcceptanceList rows={ROWS} onRespond={onRespond} />);
     fireEvent.click(screen.getByRole("button", { name: /decline/i }));
-    expect(onRespond).toHaveBeenCalledWith("a1", "DECLINED");
+    expect(onRespond).toHaveBeenCalledWith("a1", "REJECT");
   });
 });

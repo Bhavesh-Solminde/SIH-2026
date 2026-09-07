@@ -22,6 +22,22 @@ const ALLOWED_ORIGINS = new Set([
 export function createApp() {
   const app = express();
 
+  // ── No ETags ─────────────────────────────────────────────────────────────
+  // Express sends an ETag on every JSON response by default, so a repeat
+  // request carries If-None-Match and gets a bodyless 304. A browser handles
+  // that from its own HTTP cache; React Native's fetch does not implement one,
+  // so the 304 arrives with nothing to revalidate against and the promise
+  // REJECTS with "Network request failed" — indistinguishable, in the app log,
+  // from the phone having no route to the server at all.
+  //
+  // That cost real debugging time: the API log showed a healthy run of 304s
+  // while the collector app reported every fetch as a network failure.
+  //
+  // Conditional requests buy us nothing here anyway — the app keeps its own
+  // AsyncStorage cache of rates and authorisation counts (see ValueScreen), and
+  // these payloads are small. Always send a body.
+  app.set("etag", false);
+
   // ── CORS ─────────────────────────────────────────────────────────────────
   app.use((req, res, next) => {
     const origin = req.headers.origin;

@@ -1,9 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { useStrings } from '../i18n/useStrings';
-import { useLanguage } from '../i18n/LanguageContext';
-import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { Button } from '../ui/Button';
 import { Screen } from '../ui/Screen';
 import { Text } from '../ui/Text';
@@ -19,7 +18,6 @@ import { log } from '../lib/logger';
  */
 export default function HomeScreen({ navigation, db }) {
   const t = useStrings();
-  const { lang } = useLanguage();
   const { speak } = useVoice();
   const [pendingSync, setPendingSync] = useState(0);
   const [weekEarnings, setWeekEarnings] = useState(0);
@@ -51,20 +49,22 @@ export default function HomeScreen({ navigation, db }) {
     return unsub;
   }, [refresh, navigation]);
 
-  const syncLabel = pendingSync > 0
-    ? `⟳ ${pendingSync} बाकी`
-    : '✓ अद्ययावत';
+  const syncLabel = pendingSync > 0 ? t('home_sync_pending', { count: pendingSync }) : t('home_synced');
 
   return (
     <Screen style={styles.container}>
-      {/* Header: sync pill + language switcher */}
+      {/* Header: sync pill. Language switcher lives in the nav header (App.js). */}
       <View style={styles.header}>
         <View style={[styles.pill, pendingSync > 0 && styles.pillPending]}>
+          <Ionicons
+            name={pendingSync > 0 ? 'sync' : 'checkmark-circle'}
+            size={13}
+            color={pendingSync > 0 ? colors.warning : colors.primary}
+          />
           <Text variant="sm" style={pendingSync > 0 ? styles.pillTextPending : styles.pillText}>
             {syncLabel}
           </Text>
         </View>
-        <LanguageSwitcher />
       </View>
 
       {/* The one main action */}
@@ -93,7 +93,7 @@ export default function HomeScreen({ navigation, db }) {
         >
           <Text variant="sm" style={styles.tileLabel}>{t('home_price_board')}</Text>
           <Text variant="xl">₹</Text>
-          <Text variant="sm" style={styles.tileSub}>भाव पाहा</Text>
+          <Text variant="sm" style={styles.tileSub}>{t('home_view_rates')}</Text>
         </TouchableOpacity>
       </View>
     </Screen>
@@ -109,6 +109,7 @@ const styles = StyleSheet.create({
     padding: spacing[4],
   },
   pill: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing[1],
     paddingHorizontal: spacing[3], paddingVertical: spacing[1],
     backgroundColor: colors.gray200, borderRadius: 999,
   },

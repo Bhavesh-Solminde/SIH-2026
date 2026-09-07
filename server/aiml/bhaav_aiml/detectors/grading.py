@@ -4,6 +4,7 @@ graded differently by different recyclers. D10-D12 cover the zero-overlap case,
 and D13 flags a single-buyer market rather than a person."""
 
 from __future__ import annotations
+from datetime import datetime
 from bhaav_aiml.models import Context, Flag, Skip
 
 GRADE = {"GOOD": 3, "FAIR": 2, "POOR": 1}
@@ -101,13 +102,67 @@ def d9_grader_bias(ctx: Context, th) -> tuple[list[Flag], Skip | None]:
 
 def d10_downgrade_change_point(ctx: Context, th) -> tuple[list[Flag], Skip | None]:
     """A recycler at a low downgrade rate for months that jumps did not
-    experience a change in material — it experienced a change in policy. Needs
-    handover timestamps; skips if history is thin.
+    experience a change in material — it experienced a change in policy.
 
-    D10 is blind to anyone who lied from day one; D11 and D12 cover that case.
-    Skeleton skips with a reason until dated history from the simulator
-    provides the trailing-30 vs preceding-90 series it needs."""
-    return [], Skip("D10", "insufficient dated history for a change-point test")
+    Splits each recycler's dated handovers at the midpoint of their own active
+    window and compares downgrade rates either side. The split is per-recycler
+    rather than global because recyclers join at different times, and a global
+    midpoint would read a late joiner's whole history as one window.
+
+    D10 is blind to anyone who lied from day one — their rate never steps
+    because it was always high. D11 and D12 cover that case.
+    """
+    lot_by_id = ctx.lot_by_id()
+
+    by_recycler: dict[str, list[tuple[datetime, int]]] = {}
+    for h in ctx.handovers:
+        lot = lot_by_id.get(h["lot_id"])
+        if not lot or not h.get("handover_ts"):
+            continue
+        ts = datetime.fromisoformat(h["handover_ts"])
+        d = 1 if _is_downgrade(lot["condition"], h.get("inspected_condition")) else 0
+        by_recycler.setdefault(h["recycler_id"], []).append((ts, d))
+
+    flags: list[Flag] = []
+    skipped = None
+
+    for recycler_id, series in sorted(by_recycler.items()):
+        if len(series) < th["D10_min_handovers"]:
+            skipped = Skip("D10", f"insufficient dated history: {len(series)} handovers for a "
+                                  f"recycler, need {th['D10_min_handovers']}")
+            continue
+
+        series.sort(key=lambda x: x[0])
+        span_days = (series[-1][0] - series[0][0]).days
+        if span_days < th["D10_min_days"]:
+            skipped = Skip("D10", f"insufficient dated history: {span_days} days for a "
+                                  f"recycler, need {th['D10_min_days']}")
+            continue
+
+        midpoint = series[0][0] + (series[-1][0] - series[0][0]) / 2
+        preceding = [d for ts, d in series if ts < midpoint]
+        trailing = [d for ts, d in series if ts >= midpoint]
+
+        if (len(preceding) < th["D10_min_per_window"]
+                or len(trailing) < th["D10_min_per_window"]):
+            skipped = Skip("D10", "handovers too unevenly distributed to split into windows")
+            continue
+
+        prec_rate = sum(preceding) / len(preceding)
+        trail_rate = sum(trailing) / len(trailing)
+        step = trail_rate - prec_rate
+
+        if step >= th["D10_step"]:
+            flags.append(Flag("D10", "RECYCLER", recycler_id, "WARN", {
+                "trailing_rate": round(trail_rate, 4),
+                "preceding_rate": round(prec_rate, 4),
+                "step": round(step, 4),
+                "n_trailing": len(trailing),
+                "n_preceding": len(preceding),
+                "threshold": th["D10_step"],
+            }))
+
+    return flags, skipped
 
 
 def d11_cross_category_uniformity(ctx: Context, th) -> tuple[list[Flag], Skip | None]:
@@ -143,11 +198,86 @@ def d11_cross_category_uniformity(ctx: Context, th) -> tuple[list[Flag], Skip | 
 
 def d12_offers_never_learn(ctx: Context, th) -> tuple[list[Flag], Skip | None]:
     """Someone genuinely receiving poor material lowers their published rate;
-    someone lying cannot, because the high rate is what wins the lot. Regress
-    offer_to_final_drop against time: persistently high and flat is the
-    economic tell. Skips until the simulator produces the rate/handover series
-    it needs (AI-ANOMALY-SPEC section 6.3 D12)."""
-    return [], Skip("D12", "insufficient rate-and-handover series for a trend test")
+    someone lying cannot, because the high rate is what wins the lot.
+
+    Two conditions must hold together: a persistent gap between published and
+    paid, AND a published rate that has not fallen. Either alone is innocent —
+    a large gap with a falling rate is a recycler correcting course, and a flat
+    rate with no gap is a recycler who simply pays what they advertise.
+
+    This is the detector that makes the separating equilibrium legible: the
+    honest low-grade recycler declares by dropping their rate and is exonerated;
+    the liar cannot drop theirs without losing the lots that are the whole point.
+    """
+    acc_by_lot = ctx.acceptance_by_lot()
+
+    drops: dict[str, list[float]] = {}
+    stamps: dict[str, list[datetime]] = {}
+    for h in ctx.handovers:
+        if h.get("status") != "CONFIRMED":
+            continue
+        a = acc_by_lot.get(h["lot_id"])
+        if not a or not a["accepted_rate"]:
+            continue
+        drops.setdefault(h["recycler_id"], []).append(
+            1.0 - (h["final_unit_price"] / a["accepted_rate"])
+        )
+        if h.get("handover_ts"):
+            stamps.setdefault(h["recycler_id"], []).append(
+                datetime.fromisoformat(h["handover_ts"])
+            )
+
+    # Published-rate trajectory per recycler, averaged across their categories so
+    # a recycler dealing in more categories is not weighted differently.
+    series: dict[str, dict[str, list[dict]]] = {}
+    for r in ctx.rates:
+        series.setdefault(r["recycler_id"], {}).setdefault(r["category_id"], []).append(r)
+
+    def rate_fall(recycler_id: str) -> float | None:
+        """Fraction by which this recycler's published rate fell across the
+        window. Positive means they lowered it."""
+        falls = []
+        for rows in series.get(recycler_id, {}).values():
+            rows = sorted(rows, key=lambda x: x["valid_from"])
+            if len(rows) < 2 or not rows[0]["price"]:
+                continue
+            falls.append((rows[0]["price"] - rows[-1]["price"]) / rows[0]["price"])
+        return sum(falls) / len(falls) if falls else None
+
+    flags: list[Flag] = []
+    skipped = None
+
+    for recycler_id, ds in sorted(drops.items()):
+        if len(ds) < th["D12_min_handovers"]:
+            skipped = Skip("D12", f"insufficient series: {len(ds)} confirmed handovers for a "
+                                  f"recycler, need {th['D12_min_handovers']}")
+            continue
+
+        ts = sorted(stamps.get(recycler_id, []))
+        span_days = (ts[-1] - ts[0]).days if len(ts) >= 2 else 0
+        if span_days < th["D12_min_days"]:
+            skipped = Skip("D12", f"insufficient series: {span_days} days for a recycler, "
+                                  f"need {th['D12_min_days']}")
+            continue
+
+        fall = rate_fall(recycler_id)
+        if fall is None:
+            skipped = Skip("D12", "no published-rate series to trend")
+            continue
+
+        mean_drop = sum(ds) / len(ds)
+
+        # Persistent gap AND a rate that has not meaningfully fallen.
+        if mean_drop >= th["D12_flat_drop_min"] and fall < th["D12_rate_fall_max"]:
+            flags.append(Flag("D12", "RECYCLER", recycler_id, "WARN", {
+                "mean_drop": round(mean_drop, 4),
+                "rate_trend": round(fall, 4),
+                "n_handovers": len(ds),
+                "span_days": span_days,
+                "threshold": th["D12_flat_drop_min"],
+            }))
+
+    return flags, skipped
 
 
 def d13_single_buyer_market(ctx: Context, th) -> tuple[list[Flag], Skip | None]:

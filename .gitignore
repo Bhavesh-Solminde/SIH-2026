@@ -24,3 +24,12 @@ client/app/prisma/bhaav.db
 .superpowers/
 .claude/
 **/.claude/
+
+# DB snapshots — contain recycler_account password hashes
+backups/
+
+# graphify knowledge-graph output — generated, includes a 3.4MB semantic cache
+graphify-out/
+
+# Agent coordination log — local process scaffolding, same class as .claude/ and .superpowers/
+AgentContext.md

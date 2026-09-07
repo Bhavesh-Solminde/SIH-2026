@@ -88,7 +88,29 @@ describe("GET /sync/delta", () => {
     // natural insertion order rather than back-dating.
     await publish(rec.id, cat.id, "300.00", "2026-08-30T09:00:00+05:30");
 
-    // Cursor is set after the old rate was inserted
+    // Use THIS PROCESS'S clock for the cursor, not a database round trip.
+    //
+    // An earlier version of this test pulled the cursor from `SELECT now()`
+    // on the theory that `rate.created_at` is stamped server-side by
+    // Postgres's own `DEFAULT CURRENT_TIMESTAMP`, and that comparing it to a
+    // locally-generated timestamp would only work when the app and database
+    // share a machine. That theory was wrong: Prisma evaluates
+    // `@default(now())` client-side and sends the value as an explicit INSERT
+    // parameter, so `created_at` is stamped by the Node process's clock
+    // regardless of the column's DB-level default — confirmed by logging the
+    // literal SQL Prisma sends (`INSERT INTO "rate" (..., created_at) VALUES
+    // (..., $7)` with `$7` bound to a JS-computed timestamp). Meanwhile the
+    // route's cursor (`serverTime` in loadSnapshot(), which a real device
+    // echoes back on the next call) is also `new Date().toISOString()` on
+    // this same process. So the two values that must be compared already
+    // share one clock; fetching the cursor from the remote database's own
+    // clock instead introduced a real skew between two different machines,
+    // which intermittently placed a just-created row's created_at before the
+    // cursor and made the delta come back empty. Proof (captured from a
+    // failing run): cursor from `SELECT now()` = 2026-09-06T15:17:01.415Z,
+    // while the new row's created_at (the literal $7 Prisma bound) =
+    // 2026-09-06T15:17:01.411Z — 4ms *earlier* than a cursor taken *after*
+    // the row was inserted, on a remote (Supabase ap-south-1) database.
     const cursor = new Date().toISOString();
 
     // Insert the "new" rate after the cursor timestamp

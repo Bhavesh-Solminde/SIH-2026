@@ -44,13 +44,15 @@ export const DOWNGRADE_REASON_CODES = [
   "OTHER",
 ];
 
-// AI.md section 2 (updated: pickup removed, rateMatch added per product spec).
-// rateMatch: how close the recycler's rate is to the collector's expected rate.
-// When no expectedRate provided, this term is ignored (collapses to 0.5 constant).
+// AI.md section 2 — these exact weights are shown in the deck, so they must
+// stay in step with that document. The score maximises what the collector is
+// PAID, not how closely a rate matches an expectation: FLOW.md's core promise
+// is that a recycler further away paying more per kg can be the better trip.
 export const RANKING_WEIGHTS = {
-  rateMatch: 0.50,   // closeness of recycler rate to collector's expected rate
-  distance:  0.30,   // prefer nearby recyclers
-  staleness: 0.20,   // prefer recently updated rates
+  value:     0.55,   // rupees the collector receives — the dominant term
+  distance:  0.30,   // travel cost, subtracted
+  pickup:    0.10,   // recycler collects from the collector, added
+  staleness: 0.05,   // confidence in the rate, subtracted
 };
 
 // Staleness is normalised over this window before the weight is applied.

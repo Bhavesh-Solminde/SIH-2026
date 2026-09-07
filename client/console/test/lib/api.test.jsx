@@ -9,8 +9,14 @@ describe("api", () => {
   it("sends credentials so the session cookie rides along", async () => {
     fetch.mockResolvedValue({ ok: true, json: async () => ({ ok: 1 }) });
     await api.get("/recycler/rates");
+    // api.js:3 routes everything through the Next.js rewrite (/api/* →
+    // Express :4000/*) so requests are same-origin from the browser's POV —
+    // no CORS needed, and the httpOnly session cookie rides along on the
+    // rewritten same-origin request. BASE moved from an absolute
+    // "http://localhost:4000" origin to "/api" in commit 2ac75d4 for exactly
+    // this reason; this test still asserted the old absolute URL.
     expect(fetch).toHaveBeenCalledWith(
-      "http://localhost:4000/recycler/rates",
+      "/api/recycler/rates",
       expect.objectContaining({ credentials: "include" }),
     );
   });

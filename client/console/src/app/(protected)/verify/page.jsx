@@ -1,31 +1,32 @@
 "use client";
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import Nav from "../../../components/Nav.jsx";
+import HandoverForm from "../../../components/HandoverForm.jsx";
+import QrScanner from "../../../components/QrScanner.jsx";
+import Icon from "../../../components/Icon.jsx";
 import { useSession } from "../../../lib/useSession.js";
 import { api } from "../../../lib/api.js";
 import { rupees } from "../../../lib/format.js";
 
-const CONDITIONS = [
-  { code: "GOOD", label: "Good",  icon: "✅", color: "#155724", bg: "#d4edda", border: "#28a745" },
-  { code: "FAIR", label: "Fair",  icon: "⚠️", color: "#856404", bg: "#fff3cd", border: "#ffc107" },
-  { code: "POOR", label: "Poor",  icon: "❌", color: "#721c24", bg: "#f8d7da", border: "#dc3545" },
-];
-
-const DOWNGRADE_REASONS = [
-  { code: "POOR_CONDITION",      label: "Poor condition after inspection" },
-  { code: "MIXED_GRADE",         label: "Mixed grade / quality" },
-  { code: "LOW_RECOVERABLE",     label: "Low recoverable content" },
-  { code: "TRANSPORT_DISTANCE",  label: "Transport distance premium" },
-  { code: "BULK_DISCOUNT",       label: "Bulk discount applied" },
-  { code: "LOCAL_RATE_LOWER",    label: "Local market rate lower" },
-  { code: "OTHER",               label: "Other" },
-];
-
 const DT_STYLE = { fontSize: ".78rem", color: "var(--c-muted)", textTransform: "uppercase", letterSpacing: ".04em", marginBottom: ".2rem" };
 const DD_STYLE = { fontWeight: "600", fontSize: ".95rem" };
 
+// useSearchParams opts the subtree into client-side rendering, and Next 15
+// fails the production build outright ("should be wrapped in a suspense
+// boundary") when the prerenderer reaches it with nothing to fall back to.
+// The page has read ?ref= since it was written, so `next build` has been
+// failing on /verify; only `next dev` was ever exercised. The boundary makes
+// the bail-out explicit and gives the prerender something to emit.
 export default function VerifyPage() {
+  return (
+    <Suspense fallback={<><Nav /><main><h1>Verify &amp; Sign</h1></main></>}>
+      <VerifyPageContent />
+    </Suspense>
+  );
+}
+
+function VerifyPageContent() {
   const recycler = useSession();
   const searchParams = useSearchParams();
 
@@ -34,16 +35,17 @@ export default function VerifyPage() {
   const [scanError, setScanError]                 = useState(null);
   const [scanning, setScanning]                   = useState(false);
 
-  const [inspectedCondition, setInspectedCondition]   = useState("");
-  const [downgradeReasonCode, setDowngradeReasonCode] = useState("");
   const [handoverError, setHandoverError]             = useState(null);
   const [submitting, setSubmitting]                   = useState(false);
 
   const [handover, setHandover]     = useState(null);
-  const [confirmError, setConfirmError] = useState(null);
-  const [confirming, setConfirming] = useState(false);
   const [confirmed, setConfirmed]   = useState(null);
 
+  // A lookup answers two questions at once: which lot is this, and has it
+  // already been inspected? Asking only the first is what produced the
+  // "handover_already_exists" wall — reloading /verify?ref=… after a
+  // successful submit re-offered the inspection form for a lot that was
+  // already past it, and the only way to find out was to submit again.
   async function lookupRef(code) {
     if (!code?.trim()) return;
     setScanError(null);
@@ -52,11 +54,28 @@ export default function VerifyPage() {
       const result = await api.get(`/lots/${code.trim()}`);
       const l = result.lot ?? result;
       setLot(l);
-      setInspectedCondition(l.condition ?? "");
+      await loadExistingHandover(l.id);
     } catch (err) {
       setScanError(err.body?.error === "not_found" ? "Lot not found — check the reference code." : (err.message ?? "Lot not found"));
     } finally {
       setScanning(false);
+    }
+  }
+
+  // 404 here is the normal case — most scans are of lots nobody has
+  // inspected yet — so a miss must leave the form showing, not raise.
+  async function loadExistingHandover(lotId) {
+    if (!lotId) return;
+    try {
+      const { handover: h } = await api.get(`/handover/by-lot/${lotId}`);
+      if (!h) return;
+      setHandover(h);
+      if (h.collector_confirmed_at) {
+        setConfirmed({ final_price: h.final_total, handover: h });
+      }
+    } catch {
+      // No handover yet (404), or the lookup failed. Either way the
+      // inspection form is the right thing to show.
     }
   }
 
@@ -70,45 +89,62 @@ export default function VerifyPage() {
     lookupRef(refCode);
   }
 
-  async function handleHandover(e) {
-    e.preventDefault();
+  // One lookup path for both entry points: a successful QR decode fills
+  // the same reference field the typed form uses, then runs the same
+  // lookupRef() call. Nothing about the request differs by entry point.
+  function handleQrScan(decodedText) {
+    const code = (decodedText ?? "").trim().toUpperCase();
+    setRefCode(code);
+    lookupRef(code);
+  }
+
+  async function handleHandover({ inspectedCondition, downgradeReasonCode, finalUnitPrice }) {
     setHandoverError(null);
     setSubmitting(true);
     try {
       const body = { lot_id: lot.id, inspected_condition: inspectedCondition };
       if (downgradeReasonCode && inspectedCondition !== lot.condition) body.downgrade_reason_code = downgradeReasonCode;
+      if (finalUnitPrice !== undefined) body.final_unit_price = finalUnitPrice;
       const result = await api.post("/handover", body);
       setHandover(result.handover ?? result);
     } catch (err) {
+      // Someone — another terminal, or this one before a reload — already
+      // inspected this lot. That is a state to move into, not an error to
+      // show: the server hands back the whole existing handover, so show it.
+      if (err.body?.error === "handover_already_exists") {
+        setHandover(err.body);
+        if (err.body.collector_confirmed_at) {
+          setConfirmed({ final_price: err.body.final_total, handover: err.body });
+        }
+        return;
+      }
       setHandoverError(err.message ?? "Handover failed");
     } finally {
       setSubmitting(false);
     }
   }
 
-  async function handleConfirm() {
-    setConfirmError(null);
-    setConfirming(true);
-    try {
-      const result = await api.post(`/handover/${lot.id}/confirm`);
-      setConfirmed(result);
-    } catch (err) {
-      setConfirmError(err.message ?? "Confirmation failed");
-    } finally {
-      setConfirming(false);
-    }
-  }
+
+  // While the collector has it, this page is a status board. Poll rather than
+  // making the recycler reload — a reload is exactly the action that used to
+  // dump them back onto the inspection form.
+  useEffect(() => {
+    if (!handover || confirmed || !lot?.id) return;
+    if (handover.status === "DISPUTED") return;
+    const timer = setInterval(() => { loadExistingHandover(lot.id); }, 5000);
+    return () => clearInterval(timer);
+  }, [handover, confirmed, lot?.id]);
 
   function reset() {
     setRefCode(""); setLot(null); setScanError(null);
     setHandover(null); setConfirmed(null);
-    setInspectedCondition(""); setDowngradeReasonCode("");
-    setHandoverError(null); setConfirmError(null);
+    setHandoverError(null);
   }
 
   if (!recycler) return null;
 
   const condBadgeClass = (c) => c === "GOOD" ? "badge-ok" : c === "FAIR" ? "badge-warn" : "badge-danger";
+  const isDisputed = handover?.status === "DISPUTED";
 
   return (
     <>
@@ -119,7 +155,9 @@ export default function VerifyPage() {
         {/* ── Phase 4: Confirmed ─────────────────────────────────────────── */}
         {confirmed && (
           <div className="card" style={{ textAlign: "center", padding: "3rem 2rem" }}>
-            <div style={{ fontSize: "3.5rem", marginBottom: "1rem" }}>🤝</div>
+            <div style={{ color: "var(--c-primary)", marginBottom: "1rem", display: "flex", justifyContent: "center" }}>
+              <Icon name="handshake" size={56} />
+            </div>
             <h2 style={{ color: "var(--c-primary)", fontSize: "1.5rem", marginBottom: ".5rem" }}>
               Handover Confirmed
             </h2>
@@ -133,29 +171,73 @@ export default function VerifyPage() {
           </div>
         )}
 
-        {/* ── Phase 3: Awaiting collector ────────────────────────────────── */}
+        {/* ── Phase 3: Awaiting collector ──────────────────────────────────
+            No "confirm on behalf of collector" button. The two-sided
+            signature is the integrity claim the database enforces
+            (handover_confirmed_needs_both_signatures); a button that lets
+            one party press both sides makes the constraint decorative and
+            the audit trail a fiction. The recycler's job here is to wait,
+            so the panel shows the price under negotiation and the state of
+            the wait, and refreshes itself. */}
         {!confirmed && handover && (
           <div className="card">
-            <div style={{ display: "flex", alignItems: "flex-start", gap: "1rem", marginBottom: "1.5rem" }}>
-              <span style={{ fontSize: "2.5rem", lineHeight: 1 }}>⏳</span>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: "1rem", marginBottom: "1.25rem" }}>
+              <Icon name="hourglass" size={40} color="var(--c-warn)" style={{ marginTop: 2 }} />
               <div>
-                <h2 style={{ marginBottom: ".3rem" }}>Awaiting Collector Signature</h2>
+                <h2 style={{ marginBottom: ".3rem" }}>
+                  {isDisputed ? "Collector Disputed the Price" : "Awaiting Collector Signature"}
+                </h2>
                 <p style={{ color: "var(--c-muted)", fontSize: ".9rem", lineHeight: 1.5 }}>
-                  The collector will see a confirmation request on their device.<br />
-                  Once they agree, the handover is locked.
+                  {isDisputed
+                    ? "The collector did not agree to this price. The lot is recorded as disputed and is visible in History and Flags."
+                    : "The collector sees this on their own device. Only they can sign for their side — this page updates by itself when they do."}
                 </p>
               </div>
             </div>
-            {confirmError && <p role="alert">{confirmError}</p>}
-            <button type="button" onClick={handleConfirm} disabled={confirming} style={{ width: "100%", padding: ".7rem", fontSize: "1rem", justifyContent: "center" }}>
-              {confirming ? "Confirming…" : "✓ Confirm on behalf of collector"}
-            </button>
+
+            <dl className="handover-summary">
+              <div>
+                <dt>Reference</dt>
+                <dd><code>{handover.reference_code ?? lot?.reference_code ?? "—"}</code></dd>
+              </div>
+              <div>
+                <dt>Inspected condition</dt>
+                <dd>
+                  <span className={`badge ${condBadgeClass(handover.inspected_condition)}`}>
+                    {handover.inspected_condition ?? "—"}
+                  </span>
+                </dd>
+              </div>
+              <div>
+                <dt>Final price</dt>
+                <dd>{rupees(handover.final_unit_price)} / {lot?.accepted_unit ?? lot?.unit ?? "KG"}</dd>
+              </div>
+              <div>
+                <dt>Total awaiting signature</dt>
+                <dd style={{ fontSize: "1.3rem", color: "var(--c-primary)", fontWeight: 800 }}>
+                  {rupees(handover.final_total)}
+                </dd>
+              </div>
+            </dl>
+
+            <div className="action-row">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => lot && loadExistingHandover(lot.id)}
+              >
+                <Icon name="refresh" size={15} /> Check again
+              </button>
+              <button type="button" className="secondary" onClick={reset}>
+                Scan another lot
+              </button>
+            </div>
           </div>
         )}
 
         {/* ── Phase 2: Lot details + inspection form ─────────────────────── */}
         {!handover && lot && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", alignItems: "start" }}>
+          <div className="split-2">
 
             {/* Lot details */}
             <div className="card">
@@ -205,62 +287,7 @@ export default function VerifyPage() {
                 Select the condition after physical inspection
               </p>
 
-              <form onSubmit={handleHandover}>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: ".6rem", marginBottom: "1.25rem" }}>
-                  {CONDITIONS.map((c) => {
-                    const selected = inspectedCondition === c.code;
-                    return (
-                      <button
-                        key={c.code}
-                        type="button"
-                        onClick={() => setInspectedCondition(c.code)}
-                        style={{
-                          padding: "1rem .5rem",
-                          borderRadius: "8px",
-                          border: `2px solid ${selected ? c.border : "var(--c-border)"}`,
-                          background: selected ? c.bg : "var(--c-surface)",
-                          color: selected ? c.color : "var(--c-muted)",
-                          fontWeight: "700",
-                          fontSize: ".9rem",
-                          cursor: "pointer",
-                          transition: "all .15s",
-                          display: "flex",
-                          flexDirection: "column",
-                          alignItems: "center",
-                          gap: ".35rem",
-                        }}
-                      >
-                        <span style={{ fontSize: "1.4rem" }}>{c.icon}</span>
-                        {c.label}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {inspectedCondition && inspectedCondition !== lot.condition && (
-                  <div style={{ marginBottom: "1rem" }}>
-                    <label style={{ display: "block", fontSize: ".85rem", fontWeight: "500", marginBottom: ".35rem", color: "var(--c-warn)" }}>
-                      ⚠️ Downgrade reason required
-                    </label>
-                    <select value={downgradeReasonCode} onChange={(e) => setDowngradeReasonCode(e.target.value)} required>
-                      <option value="">— select reason —</option>
-                      {DOWNGRADE_REASONS.map((r) => (
-                        <option key={r.code} value={r.code}>{r.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                {handoverError && <p role="alert" style={{ marginBottom: ".75rem" }}>{handoverError}</p>}
-
-                <button
-                  type="submit"
-                  disabled={!inspectedCondition || submitting}
-                  style={{ width: "100%", padding: ".7rem", fontSize: "1rem", justifyContent: "center", marginTop: ".25rem" }}
-                >
-                  {submitting ? "Submitting…" : "Send to Collector →"}
-                </button>
-              </form>
+              <HandoverForm lot={lot} onSubmit={handleHandover} submitting={submitting} error={handoverError} />
             </div>
           </div>
         )}
@@ -269,11 +296,19 @@ export default function VerifyPage() {
         {!lot && (
           <div style={{ maxWidth: "440px", margin: "0 auto" }}>
             <div className="card" style={{ textAlign: "center" }}>
-              <div style={{ fontSize: "2.5rem", marginBottom: ".75rem" }}>🔍</div>
+              <div style={{ color: "var(--c-primary)", marginBottom: ".75rem", display: "flex", justifyContent: "center" }}>
+                <Icon name="search" size={40} />
+              </div>
               <h2 style={{ marginBottom: ".4rem" }}>Scan Reference Code</h2>
               <p style={{ color: "var(--c-muted)", fontSize: ".9rem", marginBottom: "1.5rem" }}>
                 Enter the reference code from the collector's device, or scan the QR code
               </p>
+
+              {/* Fast path: camera scan. Guaranteed path: the form below —
+                  it stays visible and functional no matter what the
+                  scanner does. */}
+              <QrScanner active={!lot} onScan={handleQrScan} />
+
               <form onSubmit={handleScan}>
                 <input
                   type="text"

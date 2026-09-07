@@ -122,9 +122,13 @@ describe("GET /recycler/rates", () => {
 
     const res = await agent.get("/recycler/rates");
     expect(res.status).toBe(200);
-    expect(res.body.length).toBe(1);
-    expect(res.body[0].price).toBe("420.00");
-    expect(res.body[0].code).toBe("PCB");
+    // GET /recycler/rates answers { rates: [...] } — the shape the console
+    // destructures at client/console/src/app/(protected)/rates/page.jsx:18.
+    // Each row is per-category and carries categoryCode, not code, and price
+    // as a Number rather than the raw Decimal string.
+    expect(res.body.rates.length).toBe(1);
+    expect(res.body.rates[0].price).toBe(420);
+    expect(res.body.rates[0].categoryCode).toBe("PCB");
   });
 
   it("returns 401 without session", async () => {

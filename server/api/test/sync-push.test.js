@@ -181,4 +181,22 @@ describe("POST /sync/push", () => {
     expect(res.body.rejected).toEqual([]);
     expect(await prisma.lot.count()).toBe(200);
   });
+
+  it("still lands the good records when one in the middle of a chunk is invalid", async () => {
+    // The property chunking must not break: partial success with a per-record
+    // reason. Serial code got this for free; concurrent code has to prove it.
+    // 25 lot records (needs a collector row too, for the FK) plus the
+    // collector itself = 26 records; one lot in the middle is invalid, so
+    // 25 land (24 lots + the collector) and 1 is rejected with a reason.
+    const records = [collectorRecord()];
+    for (let i = 0; i < 25; i += 1) records.push(lotRecord());
+    records[13] = { ...records[13], payload: { ...records[13].payload, condition: "MAYBE" } };
+
+    const res = await push(records);
+
+    expect(res.status).toBe(200);
+    expect(res.body.applied).toHaveLength(25);
+    expect(res.body.rejected).toHaveLength(1);
+    expect(res.body.rejected[0].reason).toBeTruthy();
+  });
 });

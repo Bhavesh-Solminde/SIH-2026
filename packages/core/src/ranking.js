@@ -1,5 +1,6 @@
 import { RANKING_WEIGHTS, STALENESS_NORM_DAYS } from "./constants.js";
 import { haversineKm } from "./geo.js";
+import { conditionFactorFor } from "./pricing.js";
 
 const DAY_MS = 86_400_000;
 
@@ -19,16 +20,23 @@ function normalise(values, fallback) {
 /**
  * Rank recyclers for a collector's lot.
  *
- * Scoring (all terms normalised to [0,1]):
+ * Scoring — AI.md section 2, and the formula shown in the deck:
  *
- *   score = w_rateMatch * rateMatchScore
+ *   score = w_value     * normValue
  *         - w_distance  * normDistance
+ *         + w_pickup    * (pickupAvailable ? 1 : 0)
  *         - w_staleness * normStaleness
  *
- * rateMatchScore = 1 - |recyclerRate - collectorExpectedRate| / max(recyclerRate, collectorExpectedRate)
- *   → 1.0 when rates match exactly, 0.0 when maximally different.
- *   → When collectorExpectedRate is null/0, falls back to 0.5 (neutral),
- *     and ranking is driven by distance + staleness only.
+ * value and distance are min-max normalised across the eligible candidates, so
+ * the weights are comparable. When every candidate ties on a term, that term
+ * carries no information and collapses to 0 for all of them.
+ *
+ * The dominant term is what the collector is PAID. That is the whole point:
+ * FLOW.md promises that a recycler six kilometres further away paying forty
+ * rupees more per kilo is often the better trip, and this is the calculation
+ * that makes that trade visible. Scoring on anything else — including how
+ * closely a rate matches what the collector expected — inverts the promise,
+ * because a recycler is then penalised for paying MORE than expected.
  *
  * Hard eligibility gates (applied before scoring):
  *   1. authorizationStatus === "VALID"
@@ -37,14 +45,14 @@ function normalise(values, fallback) {
  *   4. Distance <= serviceAreaKm (skipped when GPS unavailable)
  *
  * @param {object} params
- * @param {object} params.lot             - { categoryCode, quantity, unit, condition, collectionLat, collectionLng }
- * @param {Array}  params.recyclers       - recycler rows with lat, lng, authorizationStatus, materialsAccepted, serviceAreaKm
- * @param {Array}  params.rates           - rate rows with recyclerId, categoryCode, price, unit, validFrom
- * @param {object} params.from            - { lat, lng } collector GPS, or null
- * @param {string} params.asOf            - ISO date string (now)
- * @param {number} [params.collectorExpectedRate] - collector's entered expected rate per unit
- * @param {object} [params.weights]       - override RANKING_WEIGHTS
- * @param {string} [params.sortBy]        - "score" | "rate" | "distance"
+ * @param {object} params.lot       - { categoryCode, quantity, unit, condition }
+ * @param {Array}  params.recyclers - rows with lat, lng, authorizationStatus,
+ *                                    materialsAccepted, serviceAreaKm, pickupAvailable
+ * @param {Array}  params.rates     - rows with recyclerId, categoryCode, price, unit, validFrom
+ * @param {object} params.from      - { lat, lng } collector GPS, or null
+ * @param {string} params.asOf      - ISO date string (now)
+ * @param {object} [params.weights] - override RANKING_WEIGHTS
+ * @param {string} [params.sortBy]  - "score" | "value" | "distance"
  */
 export function rankRecyclers({
   lot,
@@ -52,7 +60,6 @@ export function rankRecyclers({
   rates,
   from,
   asOf,
-  collectorExpectedRate = null,
   weights = RANKING_WEIGHTS,
   sortBy = "score",
 }) {
@@ -85,32 +92,30 @@ export function rankRecyclers({
 
     const unitPrice = Number(rate.price);
     const qty = lot.quantity ?? 0;
-    const conditionFactor = { GOOD: 1.0, FAIR: 0.85, POOR: 0.70 }[lot.condition] ?? 1.0;
-    const estimatedValue = qty * unitPrice * conditionFactor;
+    const conditionFactor = conditionFactorFor(lot.condition);
+    const value = qty * unitPrice * conditionFactor;
 
     const stalenessDays = Math.max(
       0,
       Math.floor((asOfMs - new Date(rate.validFrom).getTime()) / DAY_MS),
     );
 
-    // Rate match: how close is the recycler's rate to the collector's expected rate?
-    let rateMatchScore = 0.5; // neutral when no expected rate given
-    if (collectorExpectedRate && collectorExpectedRate > 0 && unitPrice > 0) {
-      const diff = Math.abs(unitPrice - collectorExpectedRate);
-      const maxVal = Math.max(unitPrice, collectorExpectedRate);
-      rateMatchScore = 1 - diff / maxVal; // 1.0 = perfect match, 0.0 = maximally different
-    }
-
     eligible.push({
       recyclerId:          rec.id,
       name:                rec.name,
+      // Carried through so the app can offer directions once a recycler is
+      // chosen: picking a yard 9 km away is useless if the collector is then
+      // left to find it themselves.
+      lat:                 rec.lat ?? null,
+      lng:                 rec.lng ?? null,
+      address:             rec.address ?? null,
       unit:                rate.unit,
       unitPrice,
-      estimatedValue,
+      value,
       rateValidFrom:       rate.validFrom,
       distanceKm,
       stalenessDays,
-      rateMatchScore,
+      pickupAvailable:     rec.pickupAvailable === true,
       authorizationStatus: rec.authorizationStatus,
       materialsAccepted:   rec.materialsAccepted ?? [],
       recommended:         false,
@@ -119,21 +124,23 @@ export function rankRecyclers({
 
   if (eligible.length === 0) return [];
 
-  // ── Normalise distance and staleness ──────────────────────────────────
+  // ── Normalise value and distance across the candidates ────────────────
+  const nValue = normalise(eligible.map((e) => e.value), 0);
   const nDist  = normalise(eligible.map((e) => e.distanceKm), 0.5);
   const nStale = eligible.map((e) => Math.min(e.stalenessDays / STALENESS_NORM_DAYS, 1));
 
   const scored = eligible.map((e, i) => ({
     ...e,
     score:
-      weights.rateMatch  * e.rateMatchScore -
-      weights.distance   * nDist[i] -
-      weights.staleness  * nStale[i],
+      weights.value     * nValue[i] -
+      weights.distance  * nDist[i] +
+      weights.pickup    * (e.pickupAvailable ? 1 : 0) -
+      weights.staleness * nStale[i],
   }));
 
   const comparators = {
     score:    (a, b) => b.score - a.score,
-    rate:     (a, b) => b.unitPrice - a.unitPrice,
+    value:    (a, b) => b.value - a.value,
     distance: (a, b) =>
       (a.distanceKm ?? Number.POSITIVE_INFINITY) - (b.distanceKm ?? Number.POSITIVE_INFINITY),
   };

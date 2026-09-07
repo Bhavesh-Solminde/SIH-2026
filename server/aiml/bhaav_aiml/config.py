@@ -30,19 +30,28 @@ THRESHOLDS = {
     "D9_bias_critical": 0.60,
     "D9_min_shared_collectors": 10,
     "D9_critical_min_n": 20,
-    # D10 downgrade change-point.
-    "D10_step": 3.0,
+    # D10 downgrade change-point. A recycler at a low downgrade rate for months
+    # that jumps did not experience a change in material — it experienced a
+    # change in policy. `step` is the absolute rise in downgrade RATE (0..1)
+    # between the preceding and trailing windows, not a multiplier.
+    "D10_step": 0.30,
     "D10_min_days": 60,
     "D10_min_handovers": 20,
+    "D10_min_per_window": 8,
     # D11 cross-category downgrade uniformity.
     "D11_min_categories": 3,
     "D11_min_per_category": 10,
     "D11_variance_max": 0.02,
     "D11_mean_min": 0.60,
-    # D12 offers that never learn.
+    # D12 offers that never learn. `flat_drop_min` is the mean shortfall of paid
+    # against published (1 - paid/published) that counts as a persistent gap;
+    # `rate_fall_max` is how far a recycler's OWN published rate may fall across
+    # the window before they count as having learned — falling further is the
+    # honest declaration D12 must not punish.
     "D12_min_handovers": 15,
     "D12_min_days": 30,
     "D12_flat_drop_min": 0.20,
+    "D12_rate_fall_max": 0.15,
     # D13 single-buyer market.
     "D13_downgrade_rate": 0.60,
     "D13_min_handovers": 20,

@@ -5,6 +5,7 @@ import { Text } from '../ui/Text';
 import { useStrings } from '../i18n/useStrings';
 import { useFocusEffect } from '@react-navigation/native';
 import { useVoice } from '../hooks/useVoice';
+import { useLanguage } from '../i18n/LanguageContext';
 import { play } from '../audio';
 import { colors, spacing } from '../ui/tokens';
 
@@ -19,59 +20,22 @@ import { colors, spacing } from '../ui/tokens';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
+// `textKey` resolves through the catalogue at render time so a card's copy
+// follows the active language — it used to be a fixed `mr`/`hi` pair on the
+// object with the render always reading `.mr`, so switching languages never
+// actually changed what these cards said.
 const CARDS = [
-  {
-    id: 'no_fire',
-    icon: '🔥🚫',
-    mr: 'केबल जाळू नका — विषारी धूर निघतो.',
-    hi: 'केबल मत जलाएं — जहरीला धुआं निकलता है।',
-    audioClip: 'safety_no_fire',
-    bg: '#FFF3E0',
-  },
-  {
-    id: 'battery',
-    icon: '🔋⚠️',
-    mr: 'बॅटरी उघडू नका — आत ऍसिड असते.',
-    hi: 'बैटरी मत खोलें — अंदर एसिड होता है।',
-    audioClip: 'safety_battery',
-    bg: '#FFF8E1',
-  },
-  {
-    id: 'crt',
-    icon: '📺🧤',
-    mr: 'CRT टीव्ही काळजीपूर्वक हाताळा — काच जड असते.',
-    hi: 'CRT टीवी सावधानी से उठाएं — कांच भारी होता है।',
-    audioClip: 'safety_crt',
-    bg: '#E8F5E9',
-  },
-  {
-    id: 'no_acid',
-    icon: '🧪🚫',
-    mr: 'बोर्डवर ऍसिड वापरू नका — ते बेकायदेशीर आहे.',
-    hi: 'बोर्ड पर एसिड मत डालें — यह गैरकानूनी है।',
-    audioClip: 'safety_no_acid',
-    bg: '#FCE4EC',
-  },
-  {
-    id: 'gloves',
-    icon: '🧤✅',
-    mr: 'हातमोजे घाला — इलेक्ट्रॉनिक कचरा हाताळताना.',
-    hi: 'दस्ताने पहनें — इलेक्ट्रॉनिक कचरा उठाते समय।',
-    audioClip: 'safety_gloves',
-    bg: '#E3F2FD',
-  },
-  {
-    id: 'ventilation',
-    icon: '💨🏠',
-    mr: 'हवा खेळती ठेवा — बंद खोलीत काम करू नका.',
-    hi: 'हवादार जगह पर काम करें — बंद कमरे में नहीं।',
-    audioClip: 'safety_ventilation',
-    bg: '#F3E5F5',
-  },
+  { id: 'no_fire',     icon: '🔥🚫', textKey: 'safety_card_no_fire',     audioClip: 'safety_no_fire',     bg: '#FFF3E0' },
+  { id: 'battery',     icon: '🔋⚠️', textKey: 'safety_card_battery',     audioClip: 'safety_battery',     bg: '#FFF8E1' },
+  { id: 'crt',         icon: '📺🧤', textKey: 'safety_card_crt',         audioClip: 'safety_crt',         bg: '#E8F5E9' },
+  { id: 'no_acid',     icon: '🧪🚫', textKey: 'safety_card_no_acid',     audioClip: 'safety_no_acid',     bg: '#FCE4EC' },
+  { id: 'gloves',      icon: '🧤✅', textKey: 'safety_card_gloves',      audioClip: 'safety_gloves',      bg: '#E3F2FD' },
+  { id: 'ventilation', icon: '💨🏠', textKey: 'safety_card_ventilation', audioClip: 'safety_ventilation', bg: '#F3E5F5' },
 ];
 
 export default function SafetyScreen({ navigation }) {
   const t = useStrings();
+  const { lang } = useLanguage();
   const { speak } = useVoice();
   const [current, setCurrent] = useState(0);
 
@@ -88,19 +52,19 @@ export default function SafetyScreen({ navigation }) {
   };
 
   const handleAudio = (clip) => {
-    play(clip).catch(() => {});
+    play(clip, lang).catch(() => {});
   };
 
   const renderCard = ({ item }) => (
     <View style={[styles.card, { backgroundColor: item.bg, width: SCREEN_W - spacing[8] }]}>
       <Text style={styles.cardIcon}>{item.icon}</Text>
-      <Text variant="lg" style={styles.cardText}>{item.mr}</Text>
+      <Text variant="lg" style={styles.cardText}>{t(item.textKey)}</Text>
       <TouchableOpacity
         style={styles.audioBtn}
         onPress={() => handleAudio(item.audioClip)}
-        accessibilityLabel="ऐका"
+        accessibilityLabel={t('safety_listen')}
       >
-        <Text style={styles.audioBtnText}>🔊 ऐका</Text>
+        <Text style={styles.audioBtnText}>{'🔊 '}{t('safety_listen')}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -131,7 +95,7 @@ export default function SafetyScreen({ navigation }) {
       </View>
 
       <Text variant="sm" style={styles.hint}>
-        {current + 1} / {CARDS.length} — स्वाइप करा
+        {t('safety_swipe_hint', { current: current + 1, total: CARDS.length })}
       </Text>
     </Screen>
   );

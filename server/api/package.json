@@ -11,7 +11,10 @@
     "migrate:deploy": "prisma migrate deploy",
     "generate": "prisma generate",
     "seed": "node --env-file=../../.env seed/seed.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "db:backup": "node --env-file=../../.env scripts/db-snapshot.js backup",
+    "db:restore": "node --env-file=../../.env scripts/db-snapshot.js restore",
+    "mpcb:refresh": "node scripts/mpcb-refresh.js"
   },
   "dependencies": {
     "@bhaav/core": "*",

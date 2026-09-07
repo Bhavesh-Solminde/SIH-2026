@@ -36,6 +36,7 @@ export default function RateTable({ rows = [], onPublish }) {
 
   return (
     <div>
+      <div className="table-scroll">
       <table>
         <thead>
           <tr>
@@ -80,6 +81,7 @@ export default function RateTable({ rows = [], onPublish }) {
           })}
         </tbody>
       </table>
+      </div>
       <div className="action-row">
         <button type="button" className="secondary" onClick={copyExisting}>Copy current rates</button>
         <button type="button" onClick={publish}>{t("publish")}</button>

@@ -87,3 +87,12 @@ def test_detect_fail_open_returns_200_even_with_empty_data(client):
     req = base_request()
     res = client.post("/detect", json=req)
     assert res.status_code == 200
+
+
+def test_detect_returns_400_not_500_when_as_of_is_missing(client):
+    """The endpoint documents itself as fail-safe. run_detectors guards detector
+    bodies, but Context.from_request sits above it and raised a bare KeyError,
+    surfacing as a 500 on a merely malformed request."""
+    r = client.post("/detect", json={"run_id": "x", "lots": [], "handovers": []})
+    assert r.status_code == 400
+    assert "as_of" in r.json()["detail"]

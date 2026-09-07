@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { api } from "../lib/api.js";
 import { t } from "../lib/labels.js";
 
@@ -14,17 +14,20 @@ const TABS = [
 
 export default function Nav() {
   const router = useRouter();
+  const pathname = usePathname();
   async function logout() {
     await api.post("/auth/logout").catch(() => {});
     router.push("/login");
   }
   return (
     <nav>
-      {TABS.map(([href, key]) => (
-        <Link key={href} href={href}>
-          {t(key)}
-        </Link>
-      ))}
+      <div className="nav-links">
+        {TABS.map(([href, key]) => (
+          <Link key={href} href={href} aria-current={pathname?.startsWith(href) ? "page" : undefined}>
+            {t(key)}
+          </Link>
+        ))}
+      </div>
       <button type="button" onClick={logout}>
         {t("logout")}
       </button>

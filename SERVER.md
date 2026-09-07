@@ -24,7 +24,7 @@ The server is deliberately small. Three read endpoints, one write endpoint, and 
 1. **The device DB is SQLite, which is also relational.** SQLite → Postgres is close to a 1:1 schema mapping. SQLite → MongoDB means maintaining a translation layer between a relational local store and a document server, for no benefit.
 2. **The data is joins.** `lot → acceptance → handover → recycler → rate → category`.
 3. **The two-sided confirmation belongs in a database constraint**, not in application code (§3, `handover`). In a document store that rule holds only where someone remembered to write it.
-4. **The anomaly detectors are SQL** — window functions and percentiles over the transaction tables (§10). In an aggregation pipeline they are three times the length.
+4. **The anomaly detectors were designed as SQL** — window functions and percentiles over the transaction tables (§10 shows the original design). **As built, they run as pure Python functions in a separate stateless service, `server/aiml`** (FastAPI, `POST /detect`), not as literal queries in this API — see `AI.md` §11 for the contract and §10 below for why the SQL framing is still worth understanding even though it is not what ships.
 
 Plus `COPY` imports `mpcb_recyclers.csv` directly.
 
@@ -216,7 +216,9 @@ uploaded_at  timestamptz null
 id            uuid pk
 subject_type  text     -- LOT | HANDOVER | RECYCLER | COLLECTOR
 subject_id    uuid
-detector_code text     -- D1..D8, see AI.md
+detector_code text     -- one of D1, D2, D3, D6, D7, D8, D9, D10, D11, D12, D13, see AI.md §5.
+                       -- D4/D5 are registered but permanently skip and never write a row here;
+                       -- D14 was never built.
 severity      text     -- INFO | WARN | CRITICAL
 detail        jsonb    -- the numbers that triggered it
 created_at    timestamptz
@@ -245,7 +247,11 @@ resolved_at   timestamptz null
 | `GET` | `/lots/{reference_code}` | Lookup by QR |
 | `POST` | `/handover` | Recycler submits inspected quantity + final price |
 | `GET` | `/recycler/history?from=&to=` | Completed handovers, CSV export |
-| `GET` | `/recycler/flags` | Anomalies on this recycler's transactions |
+| `GET` | `/recycler/flags` | Anomalies on this recycler's transactions. Excludes `INFO` severity by default — `?includeInfo=1` returns all |
+| `POST` | `/detect-run` | Operator-triggered detection run, backing the console's "Run detection" button |
+| `POST` | `/public/collector/:id/contact` | Collector opts in to SMS with a phone number. No auth — the collector is pseudonymous |
+| `DELETE` | `/public/collector/:id/contact` | Erase the opted-in number. Idempotent |
+| `GET` | `/public/authorisation` | Counts backing the authorisation-evidence panel: how many MPCB-listed facilities are currently valid vs. lapsed, and when the list was last refreshed |
 
 ### `POST /sync/push` — the one that matters
 
@@ -282,6 +288,17 @@ Response returns `applied` and `rejected` id arrays. The device marks `synced_at
 - Field research audio and photographs are collected **with recorded verbal consent**, no faces without asking, and stored separately from the application database.
 - Photographs of *material* are not personal data. Photographs of *people* are — so don't take them.
 
+### 6.1 SMS notifications — `server/api/src/lib/sms.js`
+
+Built today, and it changes an earlier "not built" answer: **SMS notifications now exist.**
+
+- **Provider:** Fast2SMS, route `q` (Quick SMS) — no DLT sender-ID registration needed. Route `dlt` is the production path (a DLT-approved sender ID plus an approved template) and is **explicitly out of scope** for this build.
+- **Recycler is notified on acceptance**, on both paths: the online `POST /public/lots` flow and the offline `/sync/push` outbox replay (idempotent — replaying a synced batch does not re-text).
+- **Collector is notified on accept/decline, opt-in only**, via the separate `collector_contact` table (`DB.md` §3.1a) — never the base `collector` table, which stays at four columns.
+- **Fail-open, exactly like `callDetect`/`callPredict`:** `sendSms()` never throws and is never awaited on a request path. A Fast2SMS outage must never block an acceptance or a handover.
+- **Default OFF** (`SMS_ENABLED`), plus an `SMS_ALLOWLIST` and an `SMS_DRY_RUN` mode — because the 155+ seeded recycler numbers are real businesses on a public government register, and an accidental broadcast is a real-world harm, not a test failure.
+- No message ever carries a collector's identity, per the no-personal-data ground rule.
+
 ---
 
 ## 7. Seed data
@@ -294,6 +311,8 @@ Response returns `applied` and `rejected` id arrays. The device marks `synced_at
 | Categories | The seven named in the brief, plus sub-categories | With `critical_minerals` and expected weight ranges |
 
 Seed **both** your field district and your college district so the app genuinely works in the demo room.
+
+**Refreshing the MPCB list:** `npm run mpcb:refresh [path-to-csv]` (`server/api/scripts/mpcb-refresh.js`) re-parses a dropped-in CSV and updates `authorization_status`/`validity_to` on existing recycler rows — it never creates or deletes one, and it never scrapes the government site live (MPCB publishes this as a PDF, not an API). It **refuses to run** if `fetchedOn` in `mpcbSource.js` was not also updated in the same change: a stale `fetchedOn` is a claim ("we checked on this date"), not an omission, and an unchanged one is exactly as untrustworthy as no date at all.
 
 Loading the recycler CSV is one statement — no import script needed:
 
@@ -345,13 +364,16 @@ The seed script must be idempotent — `ON CONFLICT DO NOTHING` throughout — b
 6. `POST /handover/{id}/confirm` — collector's confirmation, closing the record
 7. `GET /sync/delta`
 8. Photo upload
-9. Anomaly detectors (see `AI.md`)
+9. Anomaly detectors (see `AI.md`) — **built and wired in**: they run automatically, fail-open and un-awaited, after every confirmed handover, plus on demand from an operator button on the console's flags page
+10. Fast2SMS notifications (see §6.1) — recycler alerted on acceptance (online and offline-outbox paths), collector alerted on accept/decline if they opted in
 
 If the schedule slips, cut in reverse order. **Do not cut 3 or 6** — they are the offline claim and the two-sided signature, which are the two things being demonstrated.
 
 ---
 
 ## 10. The queries that matter
+
+> **These are the original design, not the shipped implementation of the detectors.** `current_rate` and the idempotent-push pattern below are real and in use. The two detector queries (D2, D7) were the design before `server/aiml` existed as a separate service — the shipped D2 and D7 are Python functions there, computing the same logic over a JSON payload rather than a live query. Left here because the SQL is the clearest way to understand *what* each detector computes, even though it is not literally what runs.
 
 Four pieces of SQL carry most of the system. Written out here so nobody reinvents them at 2 a.m.
 

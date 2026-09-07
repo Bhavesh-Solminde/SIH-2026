@@ -1,11 +1,11 @@
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '../ui/Screen';
 import { Text } from '../ui/Text';
 import { Button } from '../ui/Button';
 import { useStrings } from '../i18n/useStrings';
-import { play, composeNumber } from '../audio';
 import { useVoice } from '../hooks/useVoice';
 import { colors, spacing } from '../ui/tokens';
 
@@ -13,14 +13,21 @@ import { colors, spacing } from '../ui/tokens';
  * S4 — Quantity input
  * Unit toggle first (KG / PIECE). Large numeric keypad.
  * Decimal for KG; integers only for PIECE.
- * Spoken feedback after each change.
+ *
+ * Spoken feedback is ONE digit per press — the digit that was just pressed,
+ * nothing else. Reading the whole running total after every tap ("two", then
+ * "twenty", then "two hundred four") is what made this screen unusable: the
+ * collector heard the old number and the new one layered together and could
+ * not tell which was which. A key press confirms the key; the running total
+ * is on screen, and the collector can hear it read back on demand from the
+ * display.
  */
 
 const KEYS = ['7','8','9','4','5','6','1','2','3','.','0','⌫'];
 
 export default function QuantityScreen({ navigation, route }) {
   const t = useStrings();
-  const { speak } = useVoice();
+  const { speak, speakClips, speakNumber } = useVoice();
   const { category, subCategory, ...upstream } = route.params ?? {};
 
   useFocusEffect(
@@ -33,11 +40,11 @@ export default function QuantityScreen({ navigation, route }) {
 
   const value = raw === '' ? '0' : raw;
 
+  const DIGIT_CLIPS = ['zero','one','two','three','four','five','six','seven','eight','nine'];
+
   const handleKey = (key) => {
     if (key === '⌫') {
-      const next = raw.slice(0, -1);
-      setRaw(next);
-      speakValue(next || '0');
+      setRaw((v) => v.slice(0, -1));
       return;
     }
     if (key === '.') {
@@ -47,16 +54,15 @@ export default function QuantityScreen({ navigation, route }) {
       return;
     }
     // Prevent leading zeros
-    const next = raw === '0' ? key : raw + key;
-    setRaw(next);
-    speakValue(next);
+    setRaw((v) => (v === '0' ? key : v + key));
+    // Confirm the key that was pressed — nothing more.
+    speakClips([DIGIT_CLIPS[Number(key)]]);
   };
 
-  const speakValue = (val) => {
-    const n = parseFloat(val);
-    if (!isNaN(n)) {
-      composeNumber(n).forEach((clip) => play(clip).catch(() => {}));
-    }
+  // Read the whole entered amount back, digit by digit, on demand.
+  const readBackValue = () => {
+    const n = parseFloat(value);
+    if (!isNaN(n)) speakNumber(n);
   };
 
   const handleUnitToggle = (u) => {
@@ -87,13 +93,23 @@ export default function QuantityScreen({ navigation, route }) {
         ))}
       </View>
 
-      {/* Display */}
-      <View style={styles.display}>
+      {/* Display — tap to hear the whole number read back, digit by digit */}
+      <TouchableOpacity
+        style={styles.display}
+        onPress={readBackValue}
+        activeOpacity={0.75}
+        accessibilityRole="button"
+        accessibilityLabel={t('requests_listen_amount')}
+      >
         <Text variant="3xl" style={styles.displayValue}>{value}</Text>
         <Text variant="md" style={styles.displayUnit}>
           {unit === 'KG' ? t('quantity_kg') : t('quantity_pieces')}
         </Text>
-      </View>
+        <View style={styles.listenRow}>
+          <Ionicons name="volume-medium-outline" size={14} color={colors.primary} />
+          <Text variant="sm" style={styles.listenText}>{t('tap_to_listen')}</Text>
+        </View>
+      </TouchableOpacity>
 
       {/* Keypad */}
       <View style={styles.keypad}>
@@ -135,6 +151,8 @@ const styles = StyleSheet.create({
   },
   displayValue: { fontWeight: '700', color: colors.primary },
   displayUnit: { color: colors.textSecondary, marginTop: spacing[1] },
+  listenRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[1], marginTop: spacing[2] },
+  listenText: { color: colors.primary, fontWeight: '600' },
   keypad: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2], marginBottom: spacing[4] },
   key: {
     width: '30%', aspectRatio: 1.5, justifyContent: 'center', alignItems: 'center',

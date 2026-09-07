@@ -1,30 +1,47 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, FlatList,
-  TextInput, KeyboardAvoidingView, Platform,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '../ui/Screen';
 import { Text } from '../ui/Text';
 import { useStrings } from '../i18n/useStrings';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useFocusEffect } from '@react-navigation/native';
-import { play, composeNumber } from '../audio';
 import { useVoice } from '../hooks/useVoice';
 import { colors, spacing } from '../ui/tokens';
 import { rankRecyclers } from '@bhaav/core/ranking';
 import { haversineKm } from '@bhaav/core/geo';
 import { log } from '../lib/logger';
 import { getCachedRates, setCachedRates, isCacheStale, cacheAgeMinutes } from '../lib/recyclerCache';
+import { AuthorisationPanel } from '../components/AuthorisationPanel.jsx';
+import { RecyclerAuthBadge } from '../components/RecyclerAuthBadge.jsx';
+
+// Best-effort persistence for the authorisation summary only, so the panel
+// can still show last-known counts when the collector is offline — never an
+// AsyncStorage hard dependency, mirroring the pattern in lib/recyclerCache.
+let AsyncStorage = null;
+try {
+  AsyncStorage = require('@react-native-async-storage/async-storage').default;
+} catch {
+  // Not installed — falls back to in-memory only for this session.
+}
+const AUTH_CACHE_KEY = 'bhaav_authorisation_v1';
 
 /**
  * S5 — Value & Ranked Recyclers
  *
  * Flow:
  *  1. Collector sees market rate range (min–max across all recyclers)
- *  2. Collector enters their expected rate per unit
- *  3. App ranks recyclers by: closeness to expected rate + distance + staleness
- *  4. Each row shows: rate, distance, ✓ Authorised, materials accepted
- *  5. Pickup availability NOT shown (per product spec)
+ *  2. App ranks recyclers on the AI.md section 2 score — 0.55·value
+ *     − 0.30·distance + 0.10·pickup − 0.05·staleness — so a further
+ *     recycler paying more per kg can win, which is the whole promise
+ *  3. Collector can re-sort by pure value or pure distance and disagree
+ *  4. Each row shows: value, rate, distance, ✓ Authorised, materials accepted
+ *
+ * No typed input on this screen: the collector is holding the material, not
+ * negotiating with a keypad, and every extra field costs a low-literacy user.
  *
  * Data:
  *  - Tries AsyncStorage cache first (24h TTL)
@@ -32,18 +49,30 @@ import { getCachedRates, setCachedRates, isCacheStale, cacheAgeMinutes } from '.
  *  - Falls back to stale cache if offline
  */
 
-const SORT_LABELS = { score: 'सुचवलेले', rate: 'दर', distance: 'अंतर' };
-const MATERIAL_LABELS = {
-  CABLE: '🔌 Cable', PCB: '🖥️ PCB', PANEL: '⚡ Panel',
-  CRT: '📺 CRT', BATTERY: '🔋 Battery', MOTOR: '⚙️ Motor',
-  PLASTIC: '♻️ Plastic', OTHER: '📦 Other',
+const SORT_LABEL_KEYS = { score: 'sort_score', rate: 'sort_rate', distance: 'sort_distance' };
+// Text-only: these render at 11px inside a dense "materials accepted" row —
+// too small for either an emoji or a drawn CategoryIcon to stay legible, so
+// the label carries the meaning alone rather than pairing with a pictogram
+// that would blur at this scale. Resolved through the same category_* keys
+// every other screen uses — these used to be a fixed English-only map, so
+// switching languages never changed what this row said.
+const MATERIAL_LABEL_KEYS = {
+  CABLE: 'category_cable', PCB: 'category_pcb', PANEL: 'category_panel',
+  CRT: 'category_crt', BATTERY: 'category_battery', MOTOR: 'category_motor',
+  PLASTIC: 'category_plastic', OTHER: 'category_other',
 };
 
 export default function ValueScreen({ navigation, route, db, apiUrl }) {
   const t = useStrings();
-  const { speak } = useVoice();
+  const { speak, speakNumber } = useVoice();
   const { lang } = useLanguage();
 
+  // Announce the screen once, on entry. This is the whole spoken output of
+  // the screen now: it used to say its own name over TTS while simultaneously
+  // firing every clip of the top recycler's estimate in parallel, and re-run
+  // both on every re-render — three voices at once, repeatedly, which is what
+  // made "अंदाजे मूल्य" unlistenable. The estimate is read on demand instead,
+  // from the button under it.
   useFocusEffect(
     useCallback(() => {
       speak(t('value_label'));
@@ -66,15 +95,21 @@ export default function ValueScreen({ navigation, route, db, apiUrl }) {
 
   const [allRates, setAllRates]           = useState([]);   // raw rates from cache/API
   const [ranked, setRanked]               = useState([]);
+  // The filtering, stated. Every recycler below is authorised, so a tick on each
+  // row says nothing — the informative number is how many were withheld.
+  const [authorisation, setAuthorisation] = useState(null);
   const [sortMode, setSortMode]           = useState('score');
-  const [expectedRateStr, setExpectedRateStr] = useState(''); // collector's input
   const [marketMin, setMarketMin]         = useState(null);
   const [marketMax, setMarketMax]         = useState(null);
   const [cacheAge, setCacheAge]           = useState(null);
   const [loading, setLoading]             = useState(true);
   const [offline, setOffline]             = useState(false);
 
-  const hasAudio = lang === 'mr' || lang === 'hi';
+  // All three languages now ship a clip pack (see src/audio/clips.js), so the
+  // listen button is no longer restricted to mr/hi. Kept as a named check
+  // (not a bare `true`) so a future language that lacks recordings can gate
+  // here again without hunting down every audio-availability check.
+  const hasAudio = lang === 'mr' || lang === 'hi' || lang === 'en';
 
   // ── Load recycler data (cache → API fallback) ─────────────────────────
   useEffect(() => {
@@ -134,11 +169,42 @@ export default function ValueScreen({ navigation, route, db, apiUrl }) {
     })();
   }, [apiUrl, categoryCode]);
 
-  // ── Re-rank whenever rates, expectedRate or sortMode changes ──────────
+  useEffect(() => {
+    if (!apiUrl) return;
+    let cancelled = false;
+    (async () => {
+      // Show a last-known count immediately — and it's what stays on screen
+      // if the fetch below fails while offline. Never blocks the recycler
+      // list, and never renders an error in its place.
+      if (AsyncStorage) {
+        try {
+          const cachedJson = await AsyncStorage.getItem(AUTH_CACHE_KEY);
+          if (cachedJson && !cancelled) setAuthorisation(JSON.parse(cachedJson));
+        } catch {
+          // Corrupt or unavailable cache — proceed as if there were none.
+        }
+      }
+      try {
+        const res = await fetch(`${apiUrl}/public/authorisation`);
+        if (!res.ok) return;
+        const body = await res.json();
+        if (!cancelled) setAuthorisation(body);
+        if (AsyncStorage) {
+          try { await AsyncStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(body)); } catch { /* ignore */ }
+        }
+      } catch (err) {
+        // Non-fatal and deliberately silent in the UI: the recycler list
+        // still works. Whatever was set from cache above (or nothing) is
+        // what stays on screen — never an error state here.
+        log.value.warn('authorisation fetch failed', { message: err?.message });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [apiUrl]);
+
+  // ── Re-rank whenever rates, condition, quantity or sortMode changes ───
   useEffect(() => {
     if (allRates.length === 0) return;
-
-    const collectorExpectedRate = parseFloat(expectedRateStr) || null;
 
     // Build recycler + rate structures for rankRecyclers
     // Group rates by recyclerId
@@ -153,6 +219,8 @@ export default function ValueScreen({ navigation, route, db, apiUrl }) {
           authorizationStatus: r.authorizationStatus ?? 'VALID',
           materialsAccepted:   r.materialsAccepted ?? [],
           serviceAreaKm:       r.serviceAreaKm ?? 25,
+          pickupAvailable:     r.pickupAvailable === true,
+          address:             r.address ?? null,
         };
       }
     }
@@ -184,7 +252,6 @@ export default function ValueScreen({ navigation, route, db, apiUrl }) {
         rates,
         from: collectorFrom,
         asOf: new Date().toISOString(),
-        collectorExpectedRate,
         sortBy: sortMode,
       });
     } catch (err) {
@@ -194,18 +261,8 @@ export default function ValueScreen({ navigation, route, db, apiUrl }) {
 
     setRanked(results);
 
-    // Speak the top recycler's estimated value
-    if (results.length > 0 && hasAudio) {
-      const est = results[0].estimatedValue;
-      composeNumber(Math.round(est)).forEach((clip) => play(clip).catch(() => {}));
-    }
-
-    log.value.info('ranked', {
-      total: results.length,
-      expectedRate: collectorExpectedRate,
-      sortMode,
-    });
-  }, [allRates, expectedRateStr, sortMode, condition, qty]);
+    log.value.info('ranked', { total: results.length, sortMode });
+  }, [allRates, sortMode, condition, qty]);
 
   const handleSelectRecycler = (rec) => {
     navigation.navigate('Accept', {
@@ -215,14 +272,33 @@ export default function ValueScreen({ navigation, route, db, apiUrl }) {
         id:             rec.recyclerId,
         name:           rec.name,
         rate:           rec.unitPrice,
-        estimatedValue: rec.estimatedValue,
+        estimatedValue: rec.value,
         distanceKm:     rec.distanceKm ?? null,
         materialsAccepted: rec.materialsAccepted,
+        // Needed by AcceptScreen to offer directions — without these the
+        // collector is told to travel 9 km and given no way to get there.
+        lat:            rec.lat ?? null,
+        lng:            rec.lng ?? null,
+        address:        rec.address ?? null,
       },
     });
   };
 
-  const topEstimate = ranked[0]?.estimatedValue ?? 0;
+  const topEstimate = ranked[0]?.value ?? 0;
+
+  // Per-recycler authorisation evidence (MPCB registration number + validity
+  // date), keyed off the raw /public/rates rows rather than the ranked
+  // output — rankRecyclers (packages/core) doesn't carry these fields
+  // through, and they aren't needed for scoring, only for display.
+  const regByRecyclerId = {};
+  for (const r of allRates) {
+    if (!regByRecyclerId[r.recyclerId]) {
+      regByRecyclerId[r.recyclerId] = {
+        registrationNo: r.registrationNo ?? null,
+        validityTo:     r.validityTo ?? null,
+      };
+    }
+  }
 
   return (
     <KeyboardAvoidingView
@@ -234,59 +310,61 @@ export default function ValueScreen({ navigation, route, db, apiUrl }) {
         {/* Offline / stale cache banner */}
         {offline && (
           <View style={styles.offlineBanner}>
+            <Ionicons name="cloud-offline-outline" size={14} color={colors.warning} />
             <Text variant="sm" style={styles.offlineText}>
-              📡 ऑफलाइन — कॅश डेटा ({cacheAge != null ? `${cacheAge} मिनिटे जुना` : 'जुना'})
+              {t('value_offline_prefix')} ({cacheAge != null ? t('value_offline_aged', { age: cacheAge }) : t('value_offline_stale')})
             </Text>
           </View>
         )}
 
-        {/* ── Market rate + collector expected rate input ─────────────── */}
+        <AuthorisationPanel authorisation={authorisation} />
+
+        {/* ── Market rate range + headline estimate ───────────────────── */}
         <View style={styles.hero}>
           {/* Market rate range */}
           {marketMin != null && (
             <View style={styles.marketRow}>
-              <Text variant="sm" style={styles.marketLabel}>बाजार दर:</Text>
+              <Text variant="sm" style={styles.marketLabel}>{t('value_market_rate_label')}</Text>
               <Text variant="sm" style={styles.marketRange}>
-                ₹{marketMin}–₹{marketMax} / {unit === 'KG' ? 'किलो' : 'नग'}
+                ₹{marketMin}{'–₹'}{marketMax} / {unit === 'KG' ? t('quantity_kg') : t('quantity_pieces')}
               </Text>
             </View>
           )}
 
-          {/* Collector's expected rate input */}
-          <View style={styles.expectedRow}>
-            <Text variant="sm" style={styles.expectedLabel}>तुमचा अपेक्षित दर (₹/{unit === 'KG' ? 'किलो' : 'नग'}):</Text>
-            <TextInput
-              style={styles.expectedInput}
-              keyboardType="numeric"
-              placeholder={marketMin ? `${marketMin}` : '0'}
-              placeholderTextColor={colors.textDisabled}
-              value={expectedRateStr}
-              onChangeText={setExpectedRateStr}
-              returnKeyType="done"
-            />
-          </View>
-
           {/* Estimated value (based on top ranked recycler) */}
+          <Text variant="sm" style={styles.heroLabel}>{t('value_best_estimate_label')}</Text>
           <Text variant="3xl" style={styles.heroValue}>
             ₹{Math.round(topEstimate).toLocaleString('en-IN')}
           </Text>
           <Text variant="sm" style={styles.heroSub}>
             {qty} {unit === 'KG' ? t('quantity_kg') : t('quantity_pieces')}
-            {ranked[0] ? ` × ₹${ranked[0].unitPrice}/${unit === 'KG' ? 'किलो' : 'नग'}` : ''}
+            {ranked[0] ? ` × ₹${ranked[0].unitPrice}/${unit === 'KG' ? t('quantity_kg') : t('quantity_pieces')}` : ''}
           </Text>
-          {loading && <Text variant="sm" style={styles.loadingText}>लोड होत आहे…</Text>}
+          {hasAudio && topEstimate > 0 && (
+            <TouchableOpacity
+              style={styles.listenBtn}
+              onPress={() => speakNumber(Math.round(topEstimate))}
+              activeOpacity={0.75}
+              accessibilityRole="button"
+              accessibilityLabel={t('value_listen_estimate_a11y')}
+            >
+              <Ionicons name="volume-medium" size={15} color={colors.primary} />
+              <Text variant="sm" style={styles.listenText}>{t('requests_listen_amount')}</Text>
+            </TouchableOpacity>
+          )}
+          {loading && <Text variant="sm" style={styles.loadingText}>{t('loading')}</Text>}
         </View>
 
         {/* ── Sort tabs ─────────────────────────────────────────────────── */}
         <View style={styles.sortRow}>
-          {Object.entries(SORT_LABELS).map(([mode, label]) => (
+          {Object.entries(SORT_LABEL_KEYS).map(([mode, labelKey]) => (
             <TouchableOpacity
               key={mode}
               style={[styles.sortBtn, sortMode === mode && styles.sortBtnActive]}
               onPress={() => setSortMode(mode)}
             >
               <Text variant="sm" style={sortMode === mode ? styles.sortBtnTextActive : null}>
-                {label}
+                {t(labelKey)}
               </Text>
             </TouchableOpacity>
           ))}
@@ -296,7 +374,7 @@ export default function ValueScreen({ navigation, route, db, apiUrl }) {
         {ranked.length === 0 ? (
           <View style={styles.empty}>
             <Text style={styles.emptyText}>
-              {loading ? 'लोड होत आहे…' : 'कोणताही अधिकृत पुनर्वापरकर्ता उपलब्ध नाही'}
+              {loading ? t('loading') : t('no_recyclers')}
             </Text>
           </View>
         ) : (
@@ -315,7 +393,8 @@ export default function ValueScreen({ navigation, route, db, apiUrl }) {
                 >
                   {isTop && (
                     <View style={styles.badge}>
-                      <Text variant="sm" style={styles.badgeText}>⭐ सुचवलेले</Text>
+                      <Ionicons name="star" size={12} color="#fff" />
+                      <Text variant="sm" style={styles.badgeText}>{t('sort_score')}</Text>
                     </View>
                   )}
 
@@ -324,7 +403,7 @@ export default function ValueScreen({ navigation, route, db, apiUrl }) {
                       {item.name}
                     </Text>
                     <Text variant="xl" style={styles.recyclerValue}>
-                      ₹{Math.round(item.estimatedValue).toLocaleString('en-IN')}
+                      ₹{Math.round(item.value).toLocaleString('en-IN')}
                     </Text>
                   </View>
 
@@ -334,13 +413,17 @@ export default function ValueScreen({ navigation, route, db, apiUrl }) {
                       ₹{item.unitPrice}/{unit === 'KG' ? 'kg' : 'pc'}
                     </Text>
                     {item.distanceKm != null && (
-                      <Text variant="sm" style={styles.metaChip}>
-                        📍 {item.distanceKm.toFixed(1)} km
-                      </Text>
+                      <View style={styles.metaChipRow}>
+                        <Ionicons name="location-outline" size={12} color={colors.textSecondary} />
+                        <Text variant="sm" style={styles.metaChip}>
+                          {t('accept_distance_km', { km: item.distanceKm.toFixed(1) })}
+                        </Text>
+                      </View>
                     )}
-                    <Text variant="sm" style={[styles.metaChip, styles.authChip]}>
-                      ✓ अधिकृत
-                    </Text>
+                    <RecyclerAuthBadge
+                      registrationNo={regByRecyclerId[item.recyclerId]?.registrationNo}
+                      validityTo={regByRecyclerId[item.recyclerId]?.validityTo}
+                    />
                   </View>
 
                   {/* Materials accepted */}
@@ -349,12 +432,12 @@ export default function ValueScreen({ navigation, route, db, apiUrl }) {
                       {mats.map((m) => (
                         <View key={m} style={[styles.matChip, m === categoryCode && styles.matChipMatch]}>
                           <Text variant="sm" style={m === categoryCode ? styles.matChipTextMatch : styles.matChipText}>
-                            {MATERIAL_LABELS[m] ?? m}
+                            {MATERIAL_LABEL_KEYS[m] ? t(MATERIAL_LABEL_KEYS[m]) : m}
                           </Text>
                         </View>
                       ))}
                       {item.materialsAccepted.length > 3 && (
-                        <Text variant="sm" style={styles.matMore}>+{item.materialsAccepted.length - 3}</Text>
+                        <Text variant="sm" style={styles.matMore}>{'+'}{item.materialsAccepted.length - 3}</Text>
                       )}
                     </View>
                   )}
@@ -371,7 +454,7 @@ export default function ValueScreen({ navigation, route, db, apiUrl }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
 
-  offlineBanner: { backgroundColor: '#FFF3CD', padding: spacing[2], alignItems: 'center' },
+  offlineBanner: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: spacing[1], backgroundColor: colors.warningSurface, padding: spacing[2] },
   offlineText:   { color: colors.warning },
 
   hero: {
@@ -382,18 +465,18 @@ const styles = StyleSheet.create({
   marketLabel:   { color: colors.textSecondary },
   marketRange:   { color: colors.primary, fontWeight: '700' },
 
-  expectedRow:   { flexDirection: 'row', alignItems: 'center', gap: spacing[2], marginBottom: spacing[3] },
-  expectedLabel: { color: colors.textSecondary, flex: 1 },
-  expectedInput: {
-    borderWidth: 1, borderColor: colors.border, borderRadius: 8,
-    paddingHorizontal: spacing[3], paddingVertical: spacing[1],
-    minWidth: 90, backgroundColor: colors.surface,
-    color: colors.text, fontSize: 16, fontWeight: '700', textAlign: 'right',
-  },
-
-  heroValue:   { fontWeight: '800', color: colors.primary, textAlign: 'center', marginTop: spacing[1] },
+  heroLabel:   { color: colors.textSecondary, textAlign: 'center', marginTop: spacing[1] },
+  heroValue:   { fontWeight: '800', color: colors.primary, textAlign: 'center' },
   heroSub:     { color: colors.textSecondary, textAlign: 'center', marginTop: spacing[1] },
   loadingText: { color: colors.textDisabled, textAlign: 'center', marginTop: spacing[1] },
+  listenBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    alignSelf: 'center', gap: spacing[1], marginTop: spacing[2],
+    paddingHorizontal: spacing[3], paddingVertical: spacing[1],
+    borderRadius: 999, backgroundColor: colors.surface,
+    borderWidth: 1, borderColor: colors.primary,
+  },
+  listenText: { color: colors.primary, fontWeight: '700' },
 
   sortRow:          { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.surface },
   sortBtn:          { flex: 1, padding: spacing[3], alignItems: 'center' },
@@ -404,6 +487,7 @@ const styles = StyleSheet.create({
   row:  { padding: spacing[4], borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.surface },
   rowTop: { backgroundColor: colors.primarySurface },
   badge: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing[1],
     alignSelf: 'flex-start', backgroundColor: colors.primary,
     paddingHorizontal: spacing[2], paddingVertical: 2, borderRadius: 999, marginBottom: spacing[1],
   },
@@ -413,9 +497,9 @@ const styles = StyleSheet.create({
   recyclerName:  { fontWeight: '600', flex: 1 },
   recyclerValue: { color: colors.primary, fontWeight: '700' },
 
-  metaRow:  { flexDirection: 'row', gap: spacing[2], marginBottom: spacing[1], flexWrap: 'wrap' },
+  metaRow:  { flexDirection: 'row', gap: spacing[2], marginBottom: spacing[1], flexWrap: 'wrap', alignItems: 'center' },
   metaChip: { color: colors.textSecondary, fontSize: 12 },
-  authChip: { color: colors.primary, fontWeight: '600' },
+  metaChipRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
 
   matRow:  { flexDirection: 'row', gap: spacing[1], flexWrap: 'wrap', marginTop: spacing[1] },
   matChip: {

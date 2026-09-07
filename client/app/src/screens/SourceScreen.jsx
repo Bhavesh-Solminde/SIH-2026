@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '../ui/Screen';
 import { Text } from '../ui/Text';
 import { useStrings } from '../i18n/useStrings';
@@ -43,7 +44,9 @@ export default function SourceScreen({ navigation, route }) {
   return (
     <Screen style={styles.container}>
       <Text variant="lg" style={styles.title}>{t('source_label')}</Text>
-      <Text variant="sm" style={styles.hint}>हे ऐच्छिक आहे — ६ सेकंदात आपोआप पुढे जाईल</Text>
+      <Text variant="sm" style={styles.hint}>
+        {t('source_auto_advance_hint', { seconds: AUTO_ADVANCE_MS / 1000 })}
+      </Text>
 
       <View style={styles.chips}>
         {SOURCES.map((s) => (
@@ -52,23 +55,24 @@ export default function SourceScreen({ navigation, route }) {
             style={styles.chip}
             onPress={() => goNext(s.toUpperCase())}
           >
+            <Ionicons name={ICONS[s]} size={18} color={colors.text} style={styles.chipIcon} />
             <Text variant="md" style={styles.chipText}>
-              {ICONS[s]} {t(`source_${s}`)}
+              {t(`source_${s}`)}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
 
       <TouchableOpacity style={styles.skip} onPress={() => goNext(null)}>
-        <Text style={styles.skipText}>वगळा (Skip)</Text>
+        <Text style={styles.skipText}>{t('source_skip')}</Text>
       </TouchableOpacity>
     </Screen>
   );
 }
 
 const ICONS = {
-  household: '🏠', shop: '🏪', office: '🏢',
-  institutional: '🏫', street: '🛣️', other: '📦',
+  household: 'home-outline', shop: 'storefront-outline', office: 'business-outline',
+  institutional: 'school-outline', street: 'trail-sign-outline', other: 'cube-outline',
 };
 
 const styles = StyleSheet.create({
@@ -77,10 +81,12 @@ const styles = StyleSheet.create({
   hint: { color: colors.textSecondary, marginBottom: spacing[8] },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[3], flex: 1, alignContent: 'flex-start' },
   chip: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing[2],
     paddingHorizontal: spacing[5], paddingVertical: spacing[4],
     backgroundColor: colors.surface, borderRadius: 99,
     borderWidth: 1, borderColor: colors.border,
   },
+  chipIcon: {},
   chipText: { fontWeight: '500' },
   skip: {
     alignSelf: 'center', padding: spacing[4],

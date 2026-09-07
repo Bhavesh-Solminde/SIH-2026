@@ -71,5 +71,6 @@ export const log = {
   db:       logger('db'),
   ref:      logger('reference'),
   api:      logger('api'),
+  voice:    logger('voice'),
 };
 

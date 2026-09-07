@@ -1,5 +1,7 @@
 """Tests for POST /simulate — M07."""
 
+from datetime import datetime
+
 from bhaav_aiml.simulate import simulate
 
 
@@ -93,3 +95,48 @@ def test_simulate_marked_simulated():
     """Output always carries simulated: True."""
     out = simulate(cfg())
     assert out["simulated"] is True
+
+
+def test_rates_span_the_whole_simulated_window():
+    """D3 needs D3_min_history_days of span; a single valid_from gives it none."""
+    out = simulate({"seed": 7, "days": 120, "n_recyclers": 4})
+    stamps = sorted({r["valid_from"] for r in out["rates"]})
+    assert len(stamps) > 1, "every rate shares one valid_from — D3/D10/D12 cannot run"
+
+    first = datetime.fromisoformat(stamps[0])
+    last = datetime.fromisoformat(stamps[-1])
+    assert (last - first).days >= 60
+
+
+def test_every_recycler_category_pair_has_a_rate_series():
+    out = simulate({"seed": 7, "days": 120, "n_recyclers": 4})
+    series = {}
+    for r in out["rates"]:
+        series.setdefault((r["recycler_id"], r["category_id"]), []).append(r)
+    assert series, "no rates emitted"
+    for key, rows in series.items():
+        assert len(rows) >= 2, f"{key} has no series to trend"
+
+
+def test_the_late_onset_liar_keeps_its_rate_high_after_it_switches():
+    """D12's economic tell: someone genuinely receiving poor material lowers
+    their published rate; someone lying cannot, because the high rate is what
+    wins the lot."""
+    out = simulate({
+        "seed": 11, "days": 120, "n_recyclers": 3,
+        "recycler_profiles": {"late_onset_liar": 1, "honest": 2},
+    })
+    liar = next(g["recycler_id"] for g in out["ground_truth"]
+                if g.get("profile") == "late_onset_liar")
+
+    # Compare within a category, not across them: categories have very
+    # different BASE_RATE values (e.g. PCB 190 vs MOTOR 60), so a comparison
+    # spanning categories is not a trend test at all.
+    by_category: dict[str, list[dict]] = {}
+    for r in out["rates"]:
+        if r["recycler_id"] == liar:
+            by_category.setdefault(r["category_id"], []).append(r)
+
+    for category_id, rows in by_category.items():
+        rows.sort(key=lambda r: r["valid_from"])
+        assert rows[-1]["price"] >= rows[0]["price"] * 0.95, category_id

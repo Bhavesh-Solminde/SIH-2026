@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { rankRecyclers } from "../src/ranking.js";
+import { estimateValue } from "../src/pricing.js";
 
 const FROM = { lat: 19.3919, lng: 72.8397 };
 const AS_OF = "2026-09-02T12:00:00+05:30";
@@ -161,6 +162,22 @@ describe("scoring", () => {
       rates: [rate({ recyclerId: "nopickup" }), rate({ recyclerId: "pickup" })],
     });
     expect(out[0].recyclerId).toBe("pickup");
+  });
+});
+
+describe("agrees with estimateValue — single-sourced condition factors", () => {
+  it("scores the same rupee value that estimateValue shows the collector, for the same lot", () => {
+    const quantity = 3;
+    const unitPrice = 430;
+    const condition = "FAIR";
+    const out = rankRecyclers({
+      lot: { ...LOT, quantity, condition },
+      from: FROM,
+      asOf: AS_OF,
+      recyclers: [recycler()],
+      rates: [rate({ price: unitPrice })],
+    });
+    expect(out[0].value).toBe(estimateValue({ quantity, unitPrice, condition }));
   });
 });
 

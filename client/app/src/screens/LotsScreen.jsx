@@ -7,29 +7,39 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '../ui/Screen';
 import { Text } from '../ui/Text';
-import { colors, spacing } from '../ui/tokens';
+import { colors, spacing, statusColors } from '../ui/tokens';
 import { useVoice } from '../hooks/useVoice';
 import { useStrings } from '../i18n/useStrings';
+import { useLanguage } from '../i18n/LanguageContext';
 import { CategoryIcon } from '../components/CategoryIcon';
 import { getDeviceId } from '../lib/deviceId';
 import { log } from '../lib/logger';
 
-const STATUS_CONFIG = {
-  PENDING:          { label: 'प्रलंबित',          bg: colors.warningSurface, text: colors.warning },
-  AWAITING_CONFIRM: { label: 'पुष्टीची प्रतीक्षा', bg: '#E3F2FD',             text: '#1565C0' },
-  CONFIRMED:        { label: 'पूर्ण',              bg: colors.primarySurface, text: colors.primary },
-  DISPUTED:         { label: 'वाद',               bg: colors.dangerSurface,  text: colors.danger },
+// Status label keys, resolved through t() at render time so they follow the
+// active language. PENDING/DISPUTED reuse the handover_* phrasing — same
+// word, same meaning, one catalogue entry.
+const STATUS_LABEL_KEY = {
+  PENDING:          'handover_pending',
+  AWAITING_CONFIRM: 'lot_status_awaiting_confirm',
+  CONFIRMED:        'lot_status_complete',
+  DISPUTED:         'handover_disputed',
 };
+const STATUS_COLOR = statusColors;
 
 const FILTERS = [
-  { key: 'ALL',              label: 'सर्व' },
-  { key: 'PENDING',          label: 'प्रलंबित' },
-  { key: 'AWAITING_CONFIRM', label: 'पुष्टी' },
-  { key: 'CONFIRMED',        label: 'पूर्ण' },
+  { key: 'ALL',              labelKey: 'filter_all' },
+  { key: 'PENDING',          labelKey: 'handover_pending' },
+  { key: 'AWAITING_CONFIRM', labelKey: 'filter_confirmation_short' },
+  { key: 'CONFIRMED',        labelKey: 'lot_status_complete' },
 ];
 
-export default function LotsScreen({ apiUrl }) {
+// toLocaleDateString locale per active language — this used to be hardcoded
+// to 'mr-IN' regardless of the collector's chosen language.
+const DATE_LOCALE = { mr: 'mr-IN', hi: 'hi-IN', en: 'en-IN' };
+
+export default function LotsScreen({ apiUrl, navigation }) {
   const t = useStrings();
+  const { lang } = useLanguage();
   const { speak } = useVoice();
   const [lots, setLots] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -68,36 +78,67 @@ export default function LotsScreen({ apiUrl }) {
 
   const filtered = filter === 'ALL' ? lots : lots.filter((l) => l.status === filter);
 
+  // Every lot carries a reference code from the moment it is created, so the
+  // QR is reachable from here for the whole life of the lot — not only in the
+  // narrow window when a handover request happens to be pending.
+  const openQr = (item) => {
+    if (!item.referenceCode) return;
+    navigation?.navigate?.('Handover', {
+      lotId:              item.lotId,
+      referenceCode:      item.referenceCode,
+      finalTotal:         item.finalTotal ?? null,
+      categoryNameMr:     item.categoryNameMr,
+      recyclerName:       item.recyclerName,
+      quantity:           item.quantity,
+      unit:               item.unit,
+      inspectedCondition: item.condition ?? null,
+    });
+  };
+
   const renderItem = ({ item }) => {
-    const cfg = STATUS_CONFIG[item.status] ?? STATUS_CONFIG.PENDING;
+    const statusColor = STATUS_COLOR[item.status] ?? STATUS_COLOR.PENDING;
+    const statusLabel = t(STATUS_LABEL_KEY[item.status] ?? STATUS_LABEL_KEY.PENDING);
     const amountStr = item.finalTotal != null
       ? `₹${Math.round(item.finalTotal).toLocaleString('en-IN')}`
       : `≈₹${Math.round(item.estimatedValue ?? 0).toLocaleString('en-IN')}`;
 
     return (
-      <View style={styles.card}>
+      <TouchableOpacity
+        style={styles.card}
+        onPress={() => openQr(item)}
+        disabled={!item.referenceCode}
+        activeOpacity={0.75}
+        accessibilityRole="button"
+        accessibilityLabel={t('lots_view_qr_a11y')}
+      >
         <View style={styles.cardRow}>
           <CategoryIcon categoryId={item.categoryCode ?? 'OTHER'} size={40} />
           <View style={styles.cardBody}>
             <View style={styles.cardTop}>
               <Text variant="md" style={styles.amount}>{amountStr}</Text>
-              <View style={[styles.chip, { backgroundColor: cfg.bg }]}>
-                <Text variant="sm" style={[styles.chipText, { color: cfg.text }]}>{cfg.label}</Text>
+              <View style={[styles.chip, { backgroundColor: statusColor.bg }]}>
+                <Text variant="sm" style={[styles.chipText, { color: statusColor.text }]}>{statusLabel}</Text>
               </View>
             </View>
             <Text variant="sm" style={styles.meta}>
-              {item.quantity} {item.unit === 'KG' ? 'किलो' : 'नग'} · {item.categoryNameMr ?? item.categoryCode}
+              {item.quantity} {item.unit === 'KG' ? t('quantity_kg') : t('quantity_pieces')} · {item.categoryNameMr ?? item.categoryCode}
             </Text>
             <Text variant="sm" style={styles.date}>
-              {new Date(item.collectionTs).toLocaleDateString('mr-IN')}
+              {new Date(item.collectionTs).toLocaleDateString(DATE_LOCALE[lang] ?? 'mr-IN')}
               {item.referenceCode ? ` · ${item.referenceCode}` : ''}
             </Text>
             {item.recyclerName && (
               <Text variant="sm" style={styles.recycler}>{item.recyclerName}</Text>
             )}
+            {item.referenceCode && (
+              <View style={styles.qrHintRow}>
+                <Ionicons name="qr-code-outline" size={12} color={colors.primary} />
+                <Text variant="sm" style={styles.qrHint}>{t('lots_tap_for_qr')}</Text>
+              </View>
+            )}
           </View>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -112,7 +153,7 @@ export default function LotsScreen({ apiUrl }) {
             onPress={() => setFilter(f.key)}
           >
             <Text variant="sm" style={filter === f.key ? styles.filterTextActive : styles.filterText}>
-              {f.label}
+              {t(f.labelKey)}
             </Text>
           </TouchableOpacity>
         ))}
@@ -124,7 +165,7 @@ export default function LotsScreen({ apiUrl }) {
         <View style={styles.empty}>
           <Ionicons name="cube-outline" size={48} color={colors.textDisabled} style={styles.emptyIcon} />
           <Text style={styles.emptyTitle}>
-            {filter === 'ALL' ? 'अद्याप कोणतीही नोंद नाही' : 'या स्थितीत काहीही नाही'}
+            {filter === 'ALL' ? t('lots_empty_all') : t('lots_empty_filtered')}
           </Text>
         </View>
       ) : (
@@ -177,6 +218,8 @@ const styles = StyleSheet.create({
   meta:     { color: colors.textSecondary, marginTop: 1 },
   date:     { color: colors.textSecondary, marginTop: 1, fontSize: 11 },
   recycler: { color: colors.textSecondary, marginTop: 1, fontSize: 11, fontStyle: 'italic' },
+  qrHintRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: spacing[1] },
+  qrHint:    { color: colors.primary, fontSize: 11, fontWeight: '600' },
   empty:    { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing[8] },
   emptyIcon:  { marginBottom: spacing[3] },
   emptyTitle: { color: colors.textSecondary, textAlign: 'center', fontWeight: '600' },

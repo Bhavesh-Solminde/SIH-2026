@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Nav from "../../../components/Nav.jsx";
 import RateTable from "../../../components/RateTable.jsx";
+import AuthorisationPanel from "../../../components/AuthorisationPanel.jsx";
 import { useSession } from "../../../lib/useSession.js";
 import { api } from "../../../lib/api.js";
 import { clog } from "../../../lib/logger.js";
@@ -11,6 +12,7 @@ export default function RatesPage() {
   const [rows, setRows] = useState([]);
   const [msg, setMsg] = useState(null);
   const [err, setErr] = useState(null);
+  const [authorisation, setAuthorisation] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -28,6 +30,19 @@ export default function RatesPage() {
   useEffect(() => {
     if (recycler) load();
   }, [recycler, load]);
+
+  useEffect(() => {
+    // Best-effort and deliberately silent on failure: the authorisation
+    // panel is supporting evidence, not the page's job. A failed fetch here
+    // must never block the rates table or surface an error banner over it —
+    // it just means the panel stays hidden this load.
+    let cancelled = false;
+    api
+      .get("/public/authorisation")
+      .then((body) => { if (!cancelled) setAuthorisation(body); })
+      .catch((e) => clog.rates.warn("authorisation fetch failed", e));
+    return () => { cancelled = true; };
+  }, []);
 
   async function publish(rates) {
     try {
@@ -49,8 +64,9 @@ export default function RatesPage() {
       <Nav />
       <main>
         <h1>{recycler.name} — Rates</h1>
-        {msg && <p role="status" style={{ color: "green" }}>{msg}</p>}
-        {err && <p role="alert" style={{ color: "red" }}>{err}</p>}
+        <AuthorisationPanel authorisation={authorisation} />
+        {msg && <p role="status">{msg}</p>}
+        {err && <p role="alert">{err}</p>}
         <RateTable rows={rows} onPublish={publish} />
       </main>
     </>

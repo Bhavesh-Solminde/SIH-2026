@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '../ui/Screen';
 import { Text } from '../ui/Text';
 import { useStrings } from '../i18n/useStrings';
@@ -20,6 +21,10 @@ import { loadReference, rateAgeDays } from '../db/repos/reference';
  * When db is null, fetches from the public API.
  */
 
+// toLocaleDateString locale per active language — this used to be hardcoded
+// to 'mr-IN' regardless of the collector's chosen language.
+const DATE_LOCALE = { mr: 'mr-IN', hi: 'hi-IN', en: 'en-IN' };
+
 export default function PriceBoardScreen({ db, apiUrl }) {
   const API_BASE = apiUrl ?? 'http://192.168.0.102:4000';
   const t = useStrings();
@@ -31,7 +36,9 @@ export default function PriceBoardScreen({ db, apiUrl }) {
       speak(t('price_board_title'));
     }, [speak, t])
   );
-  const hasAudio = lang === 'mr' || lang === 'hi';
+  // All three languages now ship a clip pack (see src/audio/clips.js), so the
+  // read-aloud button is no longer restricted to mr/hi.
+  const hasAudio = lang === 'mr' || lang === 'hi' || lang === 'en';
   const [rates, setRates] = useState([]);
   const [ageDays, setAgeDays] = useState(null);
   const [speaking, setSpeaking] = useState(false);
@@ -137,8 +144,11 @@ export default function PriceBoardScreen({ db, apiUrl }) {
     <Screen style={styles.container}>
       {isStale && rateDate && (
         <View style={[styles.strip, ageDays >= 14 && styles.stripAmber]}>
+          {ageDays >= 14 && <Ionicons name="warning" size={14} color={colors.warning} style={styles.stripIcon} />}
           <Text variant="sm" style={styles.stripText}>
-            {ageDays >= 14 ? '⚠️ भाव जुने आहेत' : `भाव: ${new Date(rateDate).toLocaleDateString('mr-IN')}`}
+            {ageDays >= 14
+              ? t('price_board_stale')
+              : t('price_board_as_of', { date: new Date(rateDate).toLocaleDateString(DATE_LOCALE[lang] ?? 'mr-IN') })}
           </Text>
         </View>
       )}
@@ -151,16 +161,18 @@ export default function PriceBoardScreen({ db, apiUrl }) {
             onPress={readAllAloud}
             disabled={speaking || rates.length === 0}
           >
-            <Text style={speaking ? styles.speakBtnTextActive : styles.speakBtnText}>
-              {speaking ? '🔊…' : '🔊'}
-            </Text>
+            <Ionicons
+              name={speaking ? 'volume-high' : 'volume-high-outline'}
+              size={26}
+              color={speaking ? colors.textDisabled : colors.primary}
+            />
           </TouchableOpacity>
         )}
       </View>
 
       {rates.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyText}>भाव लोड होत आहे…</Text>
+          <Text style={styles.emptyText}>{t('price_board_loading')}</Text>
         </View>
       ) : (
         <FlatList
@@ -176,8 +188,9 @@ export default function PriceBoardScreen({ db, apiUrl }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  strip: { backgroundColor: colors.gray200, padding: spacing[2], alignItems: 'center' },
-  stripAmber: { backgroundColor: '#FFF3CD' },
+  strip: { flexDirection: 'row', alignItems: 'center', gap: spacing[1], backgroundColor: colors.gray200, padding: spacing[2], justifyContent: 'center' },
+  stripAmber: { backgroundColor: colors.warningSurface },
+  stripIcon: {},
   stripText: { color: colors.warning },
   topRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
@@ -186,8 +199,6 @@ const styles = StyleSheet.create({
   },
   title: { fontWeight: '700' },
   speakBtn: { padding: spacing[2] },
-  speakBtnText: { fontSize: 28 },
-  speakBtnTextActive: { fontSize: 28, opacity: 0.5 },
   list: { flex: 1 },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: spacing[3],

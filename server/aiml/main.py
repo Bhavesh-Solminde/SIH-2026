@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from bhaav_aiml.config import IN_SCOPE, CONFIG_VERSION
 from bhaav_aiml.models import Context, DetectResponse
 from bhaav_aiml.detectors import run_detectors
@@ -18,7 +18,15 @@ def detect(body: dict):
     # writes; the API decides what to persist (AI.md section 11 rules 1-2).
     # Fail-open: run_detectors catches any detector exception and skips that
     # detector — an exception inside a detector must never return HTTP 500.
-    ctx = Context.from_request(body)
+    # A missing required field is a bad request, not a 500 (models.py docstring).
+    # run_detectors is already fail-safe for detector bodies; this covers the
+    # context construction above it, so a malformed payload can never crash the
+    # endpoint that a collector's sale depends on staying up.
+    try:
+        ctx = Context.from_request(body)
+    except KeyError as missing:
+        raise HTTPException(status_code=400,
+                            detail=f"missing required field: {missing.args[0]}")
     flags, ran, skipped = run_detectors(ctx)
     return DetectResponse(
         run_id=body.get("run_id", ""),
