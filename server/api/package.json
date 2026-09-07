@@ -8,6 +8,7 @@
     "dev": "node --env-file=../../.env --watch src/server.js",
     "start": "node --env-file=../../.env src/server.js",
     "start:prod": "node src/server.js",
+    "postinstall": "prisma generate",
     "migrate": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
     "generate": "prisma generate",
