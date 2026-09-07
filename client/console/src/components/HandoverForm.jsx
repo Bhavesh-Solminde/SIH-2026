@@ -25,10 +25,11 @@ const DOWNGRADE_REASONS = [
   { code: "OTHER",               label: "Other" },
 ];
 
-// Mirrors CONDITION_FACTOR in server/api/src/routes/handover.js — the price
-// the server would derive if this form sent no explicit one. Kept here only
-// to seed and label the suggestion buttons; the server still owns the
-// default when final_unit_price is omitted.
+// The server no longer derives a price at all — final_unit_price is required,
+// and POST /handover 400s without it (see routes/handover.js). This ladder
+// exists only here now, to seed and label the suggestion buttons so the
+// common case (accept the grade-adjusted number) is one click instead of
+// hand-typing it.
 const CONDITION_FACTOR = { GOOD: 1.0, FAIR: 0.85, POOR: 0.7 };
 
 // Number("") is 0, so a plain Number() coercion turns an empty price box

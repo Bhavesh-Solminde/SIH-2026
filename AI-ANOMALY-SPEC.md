@@ -15,6 +15,23 @@ not replace either. It adds:
 - an edge-case register.
 
 > **Status as built:** D9–D13 are implemented and in `server/aiml/bhaav_aiml/config.py::IN_SCOPE` (`server/aiml/bhaav_aiml/detectors/grading.py`). D14 (§6.3, evidence-photo reuse) remains a stretch goal that was never built. `bhaav_aiml/evaluate.py` now exists — recall, precision, an alert-budget check, and a flag-everyone baseline (§9 below) — run against the simulator's five recycler archetypes, with a dated rate series (§8) so D3, D10 and D12 are actually reachable.
+>
+> **Superseded (2026-09-07) for the live product.** The API no longer calls `POST /detect`
+> or writes any D1–D13 flag — `runDetection`, `src/lib/detectRun.js` and `POST /detect-run`
+> were removed from `server/api`. Every handover is scored once, at creation, by the deployed
+> price model (`callPredict`, `POST /predict`); its per-transaction `ML_PRICE_ANOMALY` flag is
+> then aggregated per party in `server/api/src/lib/entityAnomaly.js` — the share of a
+> recycler's or collector's own scored transactions that came back flagged, not a fixed count,
+> so the bar a 3-transaction party must clear and the bar a 300-transaction party must clear
+> are not the same absolute number. A party's rate is reported `insufficient_history` below a
+> minimum sample (`ANOMALY_MIN_SAMPLE`, default 5) rather than resolving either way on too
+> little data, and their `ML_FLAG_RATE` flag is written, refreshed, or resolved as their own
+> rate crosses `ANOMALY_FLAG_RATE_THRESHOLD` (default 20%) — both are runtime configuration,
+> not constants in code. The eleven detectors below, `bhaav_aiml`, `evaluate.py` and the
+> simulator remain in the repo and remain correct as a specification and as evidence of what
+> was built and evaluated; they are simply not in the live request path. Everything else in
+> this document — the reason-code workflow (§3.2), the severity/action table (§3.1), the
+> schema additions (§0.2, since landed) — still describes the shipped product.
 
 Notation follows `AI.md` §5 throughout: `P_est` = the estimate the collector saw,
 `P_pub` = published rate frozen at acceptance, `P_final` = amount actually paid and

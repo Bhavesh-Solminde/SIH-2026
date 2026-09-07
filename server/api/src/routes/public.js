@@ -225,9 +225,9 @@ publicRouter.post("/lots", async (req, res, next) => {
     log.req.info("POST /public/lots", { lotId, deviceId, categoryCode });
 
     // Fire-and-forget recycler notification, fired AFTER the transaction has
-    // committed — same fail-open rule as scoreHandover/runDetection in
-    // handover.js. A Fast2SMS outage or timeout must never cost a collector
-    // their recorded lot, and a slow third-party HTTP call must never hold
+    // committed — same fail-open rule as scoreHandover in handover.js. A
+    // Fast2SMS outage or timeout must never cost a collector their recorded
+    // lot, and a slow third-party HTTP call must never hold
     // the transaction open. No collector identity travels in the message:
     // only category, quantity, and an opaque reference code derived from the
     // lot id (never the collector id or device id) — the project's ground

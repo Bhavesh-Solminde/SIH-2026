@@ -88,37 +88,32 @@ describe("FlagsPage", () => {
     expect(screen.getByText(/no flags — all clear/i)).toBeInTheDocument();
   });
 
-  it("runs detection and reports how many flags were written", async () => {
+  it("rechecks the recycler's flag rate and reports it when over the line", async () => {
     api.get.mockResolvedValue([]);
     api.post.mockResolvedValue({
-      runId: "run-1",
-      status: "ok",
-      detectorsRun: ["D1", "D2", "D9"],
-      detectorsSkipped: [{ code: "D10", reason: "insufficient dated history" }],
-      flagsWritten: 3,
+      status: "flagged",
+      total: 12,
+      flagged: 4,
+      rate: 0.3333,
+      threshold: 0.2,
     });
 
     render(<FlagsPage />);
-    fireEvent.click(await screen.findByRole("button", { name: /run detection/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /recheck my flag rate/i }));
 
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/detect-run", {}));
-    expect(await screen.findByText(/3 flags written/i)).toBeInTheDocument();
-    expect(screen.getByText(/D10/)).toBeInTheDocument();
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/recycler/anomaly/recheck", {}));
+    expect(await screen.findByText(/4 of your last 12 scored transactions/i)).toBeInTheDocument();
+    expect(screen.getByText(/33%/)).toBeInTheDocument();
   });
 
-  it("says so plainly when the detector service is unavailable", async () => {
+  it("says so plainly when the recheck request itself fails", async () => {
     api.get.mockResolvedValue([]);
-    api.post.mockResolvedValue({
-      runId: "run-2",
-      status: "pending",
-      reason: "timeout after 2000ms",
-      flagsWritten: 0,
-    });
+    api.post.mockRejectedValue(new Error("timeout after 2000ms"));
 
     render(<FlagsPage />);
-    fireEvent.click(await screen.findByRole("button", { name: /run detection/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /recheck my flag rate/i }));
 
-    expect(await screen.findByText(/detector service unavailable/i)).toBeInTheDocument();
+    expect(await screen.findByText(/recheck failed/i)).toBeInTheDocument();
     expect(screen.getByText(/timeout after 2000ms/i)).toBeInTheDocument();
   });
 });

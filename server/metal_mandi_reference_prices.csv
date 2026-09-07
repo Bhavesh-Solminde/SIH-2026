@@ -1,0 +1,119 @@
+reference_id,Category,Item,Specification,Unit,reference_price,price_change_pct,critical_materials
+REF001,AC Split,1 Ton Copper (1T-Cop),Split AC,KG,132.00,0.08,"Copper, Iron, Aluminium"
+REF002,AC Split,1 Ton Copper Inverter (1T-Cop-INV),Inverter Split AC,KG,120.00,0.08,"Copper, Iron, Aluminium, Rare Earths (PCBs)"
+REF003,AC Split,1.5 Ton Copper (1.5T-Cop),Split AC,KG,140.00,0.07,"Copper, Iron, Aluminium"
+REF004,AC Split,1.5 Ton Copper Inverter (1.5T-Cop-INV),Inverter Split AC,KG,123.00,-0.08,"Copper, Iron, Aluminium, Rare Earths (PCBs)"
+REF005,AC Split,1.5 Ton Aluminium (1.5T-Alu),Split AC,KG,116.00,-0.09,"Aluminium, Iron"
+REF006,AC Split,1.5 Ton Aluminium Inverter (1.5T-Alu-INV),Inverter Split AC,KG,101.00,0.20,"Aluminium, Iron, Rare Earths (PCBs)"
+REF007,AC Split,2 Ton Copper (2T-Cop),Split AC,KG,141.00,0.07,"Copper, Iron, Aluminium"
+REF008,AC Split,2 Ton Copper Inverter (2T-Cop-INV),Inverter Split AC,KG,128.00,0.08,"Copper, Iron, Aluminium, Rare Earths (PCBs)"
+REF009,AC Split,2 Ton Aluminium (2T-Alu),Split AC,KG,126.00,-0.08,"Aluminium, Iron"
+REF010,AC Split,2 Ton Aluminium Inverter (2T-Alu-INV),Inverter Split AC,KG,113.00,0.09,"Aluminium, Iron, Rare Earths (PCBs)"
+REF011,AC Window,1 Ton Copper (1T-Cop),Window AC,KG,121.00,-0.08,"Copper, Iron, Aluminium"
+REF012,AC Window,1 Ton Copper Inverter (1T-Cop-INV),Inverter Window AC,KG,107.00,0.09,"Copper, Iron, Aluminium"
+REF013,AC Window,1.5 Ton Copper (1.5T-Cop),Window AC,KG,125.00,0.08,"Copper, Iron, Aluminium"
+REF014,AC Window,1.5 Ton Copper Inverter (1.5T-Cop-INV),Inverter Window AC,KG,111.00,0.09,"Copper, Iron, Aluminium"
+REF015,AC Window,1.5 Ton Aluminium (1.5T-Alu),Window AC,KG,111.00,0.09,"Aluminium, Iron"
+REF016,AC Window,1.5 Ton Aluminium Inverter (1.5T-Alu-INV),Inverter Window AC,KG,96.00,0.10,"Aluminium, Iron"
+REF017,AC Window,2 Ton Copper (2T-Cop),Window AC,KG,129.00,0.08,"Copper, Iron, Aluminium"
+REF018,AC Window,2 Ton Copper Inverter (2T-Cop-INV),Inverter Window AC,KG,114.00,0.09,"Copper, Iron, Aluminium"
+REF019,AC Window,2 Ton Aluminium (2T-Alu),Window AC,KG,125.00,-0.08,"Aluminium, Iron"
+REF020,AC Window,2 Ton Aluminium Inverter (2T-Alu-INV),Inverter Window AC,KG,109.00,0.09,"Aluminium, Iron"
+REF021,AC Components / Jali,AC Jali Pipe,Copper Pipe,KG,1204.00,0.08,Copper
+REF022,AC Components / Jali,AC Jali Patra,Aluminium Sheet / Fins,KG,240.00,0.42,Aluminium
+REF023,AC Components / Jali,Copper Indoor,Indoor Coil / Jali,KG,555.00,0.00,Copper
+REF024,AC Components / Jali,Copper Outdoor,Outdoor Coil / Jali,KG,509.00,0.00,Copper
+REF025,Compressor,Aluminium Rotary,Rotary Compressor,KG,46.00,1.10,"Aluminium, Iron"
+REF026,Compressor,Copper Baccha,Small Copper Compressor,KG,127.00,-0.08,"Copper, Iron"
+REF027,Compressor,Copper Handiya (Medium),Medium Copper Compressor,KG,129.00,0.08,"Copper, Iron"
+REF028,Compressor,Rotary (AC),AC Rotary Compressor,KG,132.00,-0.08,"Copper, Iron"
+REF029,Compressor,Rotary (DC),DC Rotary Compressor,KG,78.00,0.00,"Copper, Iron, Neodymium"
+REF030,Compressor,Scroll,Scroll Compressor,KG,84.00,0.00,"Copper, Iron"
+REF031,Compressor,Tanki,Compressor Tank,KG,92.00,0.00,Iron / Steel
+REF032,Compressor,Receiver,Compressor Receiver Tank,KG,106.00,0.00,Iron / Steel
+REF033,Fridge,Single Door (Alu),Single Door Fridge,KG,30.00,0.34,"Aluminium, Iron"
+REF034,Fridge,Single Door (Cop),Single Door Fridge,KG,48.00,0.21,"Copper, Iron"
+REF035,Fridge,Single Door Mix,Single Door Fridge Mixed,KG,37.00,2.79,Mixed Scrap
+REF036,Fridge,Double Door (Alu),Double Door Fridge,KG,29.00,0.35,"Aluminium, Iron"
+REF037,Fridge,Double Door (Cop),Double Door Fridge,KG,51.00,0.20,"Copper, Iron"
+REF038,Washing Machine,Automatic - Front Load,Front Load Washer,KG,27.00,2.62,"Iron, Copper, Stainless Steel"
+REF039,Washing Machine,Automatic - Top Load,Top Load Washer,KG,36.00,1.98,"Iron, Copper, Plastic"
+REF040,Washing Machine,Semi Automatic - Top Load,Semi-Auto Washer,KG,37.00,1.93,"Plastic, Iron, Copper Motor"
+REF041,Washing Machine,Mix Washing Machine,Mixed Washer Scrap,KG,36.00,1.99,Mixed Scrap
+REF042,E-Waste,E-waste without accessories,General E-waste,KG,33.00,1.85,"Copper, Gold, Tantalum, Plastic"
+REF043,E-Waste,E-waste with accessories,General E-waste with wires/cables,KG,34.00,1.80,"Copper, Gold, Tantalum, Cables"
+REF044,E-Waste,E-waste (H),Heavy / High Grade E-waste,KG,35.00,2.04,"Copper, Gold, Tantalum, Heavy Metals"
+REF045,Copper Scrap,Laal Maal,High Purity Bright Copper Wire / Scrap,KG,1223.00,0.08,Pure Copper
+REF046,Copper Scrap,Telewire,Telecom Copper Wire,KG,1214.00,0.08,Copper
+REF047,Copper Scrap,AC Jali Pipe,Clean AC Copper Tube,KG,1204.00,0.08,Copper
+REF048,Copper Scrap,Mota,Heavy Gauge Copper,KG,1199.00,0.08,Copper
+REF049,Copper Scrap,AC Taake Wala,Soldered / Joint AC Copper,KG,1195.00,0.08,Copper
+REF050,Copper Scrap,Medium,Medium Gauge Copper Scrap,KG,1183.00,0.08,Copper
+REF051,Copper Scrap,Bareek Saaf,Clean Fine Copper Wire,KG,1169.00,0.09,Copper
+REF052,Copper Scrap,Tel Wala Maal,Oily / Transformer Copper,KG,1150.00,0.09,Copper
+REF053,Copper Scrap,Bareek Second,Secondary / Coated Fine Copper Wire,KG,1121.00,0.09,Copper
+REF054,Copper Scrap,Kalaiyya,Tinned Copper Wire (Single),KG,1093.00,0.09,"Copper, Tin"
+REF055,Copper Scrap,Double Kalaiyya,Double Tinned Copper Scrap,KG,998.00,0.10,"Copper, Tin"
+REF056,Copper Scrap,Copper Anaconda,Anaconda Copper Armoured Cable Scrap,KG,529.00,-0.01,"Copper, PVC / Steel"
+REF057,Aluminium Scrap,Wire Scrap,Clean Aluminium Electrical Wire,KG,322.00,0.31,Aluminium
+REF058,Aluminium Scrap,Bartan Scrap,Utensil Aluminium Scrap,KG,284.00,0.71,Aluminium
+REF059,Aluminium Scrap,Section,Architectural Extrusion / Profile,KG,257.00,-0.39,Aluminium
+REF060,Aluminium Scrap,Heatsink,Extruded Aluminium Heatsinks,KG,248.00,-0.40,Aluminium
+REF061,Aluminium Scrap,Motor Purja,Aluminium Motor Body Parts,KG,241.00,-0.41,"Aluminium, Cast Alloy"
+REF062,Aluminium Scrap,Hard Disk Purja,HDD Cast Aluminium Casing,KG,241.00,-0.41,Aluminium Alloy
+REF063,Aluminium Scrap,AC Jali Patra,AC Aluminium Fin Scrap,KG,240.00,0.42,Aluminium
+REF064,Aluminium Scrap,Hyzinc,Zinc-Aluminium Die Cast Scrap,KG,230.00,-0.43,"Zinc, Aluminium"
+REF065,Aluminium Scrap,Alloy Wheel,Automotive Aluminium Alloy Wheels,KG,224.00,-0.44,"Aluminium Alloy, Silicon"
+REF066,Aluminium Scrap,Bus Sheet,Aluminium Body Sheets,KG,223.00,-0.45,Aluminium Sheet
+REF067,Aluminium Scrap,Brake Shoe,Automotive Aluminium Brake Shoe Castings,KG,210.00,-0.47,Aluminium Alloy
+REF068,Brass Scrap,Purja,Brass Components / Plumbing & Electrical Parts,KG,872.00,-0.11,"Copper, Zinc (Brass)"
+REF069,Iron & Steel Scrap,Billet,Steel Billets Scrap,KG,43.00,1.91,"Iron, Carbon"
+REF070,Iron & Steel Scrap,MS Ingot,Mild Steel Ingots,KG,42.00,1.96,Iron / Mild Steel
+REF071,Iron & Steel Scrap,Cast Iron (Local),Foundry Cast Iron Scrap,KG,37.00,2.23,Cast Iron
+REF072,Iron & Steel Scrap,CRC,Cold Rolled Coil / Sheet Scrap,KG,37.00,1.66,Mild Steel
+REF073,Iron & Steel Scrap,Melting Scrap,Heavy Melting Scrap (HMS),KG,36.00,1.69,Iron / Steel
+REF074,Iron & Steel Scrap,Plant Cutting,Industrial Structural Cuttings,KG,36.00,1.72,Mild Steel
+REF075,Iron & Steel Scrap,MS Scrap (New),New Fabrication MS Scrap,KG,35.00,2.33,Mild Steel
+REF076,Iron & Steel Scrap,Core Rutter,Electrical Stamping / Core Scrap,KG,35.00,1.73,Silicon Steel / Iron
+REF077,Iron & Steel Scrap,Piece to Piece,Sorted Heavy Iron Scrap,KG,33.00,1.87,Iron
+REF078,Iron & Steel Scrap,Mixed,Mixed Commercial Iron Scrap,KG,32.00,1.93,Iron
+REF079,Iron & Steel Scrap,Selected,Selected Quality Iron Scrap,KG,32.00,1.93,Iron
+REF080,Iron & Steel Scrap,MS Scrap (Old),Old / Demolition MS Scrap,KG,31.00,1.96,Mild Steel
+REF081,Wires & Cables,Fitting 12-20mm,Heavy Gauge Insulated Copper Wire,KG,565.00,0.08,"Copper, PVC"
+REF082,Wires & Cables,Fitting 6-12mm,Medium Gauge Insulated Copper Wire,KG,492.00,-0.01,"Copper, PVC"
+REF083,Wires & Cables,Fitting 2-6mm,Standard Household Electrical Wire,KG,377.00,0.02,"Copper, PVC"
+REF084,Wires & Cables,Lead Heavy,Lead Sheathed Heavy Cable / Scrap,KG,302.00,-0.01,"Lead, Copper"
+REF085,Wires & Cables,Dhada,Commercial Mixed Unstripped Wire,KG,114.00,0.07,"Copper, Plastic Sheath"
+REF086,Magnets & Motors,MRI / Windmill Magnet,High-Grade NdFeB Neodymium Magnet,KG,1434.00,0.00,"Neodymium (Nd), Dysprosium (Dy), Boron, Iron"
+REF087,Magnets & Motors,HDD Magnet,Hard Disk Drive NdFeB Voice Coil Magnet,KG,1397.00,0.00,"Neodymium (Nd), Boron, Iron"
+REF088,Magnets & Motors,Rotor Magnet (NdFeB),EV / Industrial Motor Rotor Magnet,KG,1369.00,0.00,"Neodymium (Nd), Praseodymium (Pr), Iron"
+REF089,Magnets & Motors,Alni & Alnico Magnet,Aluminium-Nickel-Cobalt Alloy Magnet,KG,296.00,0.00,"Cobalt (Co), Nickel (Ni), Aluminium"
+REF090,Magnets & Motors,Ferrite Magnet,Ceramic / Speaker Ferrite Magnet,KG,14.00,0.00,"Iron Oxide, Barium / Strontium"
+REF091,Home Appliance,Geyser (Iron Tanki),Water Heater with Iron Storage Tank,KG,36.00,0.84,"Iron, Copper Element, Insulation"
+REF092,Home Appliance,Microwave & Oven,Ovens / Microwave Units,KG,43.00,8.10,"Iron, Magnetron, Copper Transformer"
+REF093,Home Appliance,Printer,Inkjet / Laser Printers,KG,35.00,4.45,"Engineering Plastics, PCB, Small Motors"
+REF094,Home Appliance,Dishwasher,Automatic Dishwasher Unit,KG,22.00,0.00,"Stainless Steel, Iron, Copper Motor"
+REF095,Li-ion Battery,Smartphone Battery,High energy density Li-ion / Li-Po cell,KG,649.00,0.00,"Lithium, Cobalt, Nickel, Copper, Aluminium"
+REF096,Li-ion Battery,Mix (Smartphone & Keypad),Mixed Mobile Phone Batteries,KG,486.00,0.00,"Lithium, Cobalt, Nickel"
+REF097,Li-ion Battery,Keypad Phone Battery,Feature Phone Li-ion Battery,KG,321.00,0.00,"Lithium, Cobalt"
+REF098,Li-ion Battery,Laptop Battery,18650 / Pouch Cell Laptop Pack,KG,276.00,0.00,"Lithium, Cobalt, Nickel, Copper"
+REF099,Li-ion Battery,"Earbud, Powerbank & Small Gadget",Small Electronics Li-ion Battery Scrap,KG,253.00,0.00,"Lithium, Cobalt"
+REF100,Li-ion Battery,Non-Portable / UPS,UPS / Inverter Large Battery Scrap,KG,65.00,0.00,Lead (Lead-Acid) / Li-ion Chemistry
+REF101,PCB Scrap,Smart Phone - 256GB,High Grade Flagship Mobile Motherboard,KG,1813.00,0.00,"Gold, Palladium, Tantalum, Silver, Copper"
+REF102,PCB Scrap,Laptop - Server Board,Multi-socket Server Motherboard,KG,1665.00,0.00,"Gold, Tantalum, Palladium, Copper"
+REF103,PCB Scrap,Smart Phone - 128GB,Mid-to-High Grade Mobile Motherboard,KG,1166.00,0.00,"Gold, Tantalum, Copper"
+REF104,PCB Scrap,Desktop - Double Chip,Desktop Dual BGA Chipset Board,KG,1041.00,0.00,"Gold, Silver, Tantalum, Copper"
+REF105,PCB Scrap,Laptop - VGA Chip,Laptop Board with Dedicated GPU,KG,749.00,0.00,"Gold, Tantalum, Silver, Copper"
+REF106,PCB Scrap,Laptop - China Chip,Budget Laptop Motherboard,KG,666.00,0.00,"Gold, Copper, Tantalum"
+REF107,PCB Scrap,Desktop - Single Chip,Desktop Single Chip Motherboard,KG,624.00,0.00,"Gold, Tantalum, Copper"
+REF108,PCB Scrap,Smart Phone - 8GB,Entry-level Smartphone Board,KG,389.00,0.00,"Gold, Tantalum, Copper"
+REF109,PCB Scrap,Set top Box - Combo Chip,Combo Chip STB Board,KG,291.00,0.00,"Copper, Gold traces, Tantalum"
+REF110,PCB Scrap,Set top Box - VGA Chip,VGA Chip STB Board,KG,233.00,0.00,"Copper, Gold traces"
+REF111,PCB Scrap,Set top Box - Black Chip,Black Chip STB Board,KG,175.00,0.00,"Copper, Gold traces"
+REF112,PCB Scrap,Desktop - China Chip,Low Grade Desktop / Clone Board,KG,167.00,0.00,"Copper, Small trace Gold"
+REF113,PCB Scrap,Set top Box - China Chip,Low Grade STB Board,KG,117.00,0.00,"Copper, Base metals"
+REF114,PCB Scrap,Keypad Phone - Branded,Branded Feature Phone Motherboard,KG,105.00,0.00,"Gold, Tantalum, Copper"
+REF115,PCB Scrap,Keypad Phone - China,China Feature Phone Motherboard,KG,35.00,0.00,"Copper, Trace precious metals"
+REF116,Displays & Panels,LCD Display Scrap,Liquid Crystal Display Panels,KG,29.00,3.58,"Indium, Gallium, Leaded Glass (Safety Class)"
+REF117,Displays & Panels,Mix Display Scrap,Mixed Display Units,KG,25.00,4.15,"Indium, Gallium"
+REF118,Displays & Panels,LED Display Scrap,Light Emitting Diode Backlit Panels,KG,21.00,4.41,"Gallium, Indium, Rare Earth Phosphors"

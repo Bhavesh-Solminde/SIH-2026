@@ -3,13 +3,28 @@ import { prisma } from "../db.js";
 import { requireSession } from "../middleware/requireSession.js";
 import { uuidv7, referenceCodeFromUuid } from "@bhaav/core/ids";
 import { callPredict } from "../lib/aiml.js";
-import { runDetection } from "../lib/detectRun.js";
+import { getReferencePrice } from "../lib/referencePrice.js";
+import { getBuyerOfferForLot } from "../lib/buyerOffer.js";
+import { refreshEntityFlagRate } from "../lib/entityAnomaly.js";
 import { log } from "../lib/logger.js";
 
 export const handoverRouter = Router();
 
-// Condition factors — DB.md 3.5 / condition_factor table
-const CONDITION_FACTOR = { GOOD: 1.0, FAIR: 0.85, POOR: 0.7 };
+// A malformed lot_id used to reach Prisma and come back as a 500. It is a
+// client mistake, and it should read as one.
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// The reasons the console offers. Anything else is a client that has drifted
+// from the form, and storing it would quietly corrupt the downgrade reporting.
+const DOWNGRADE_REASON_CODES = new Set([
+  "POOR_CONDITION",
+  "MIXED_GRADE",
+  "LOW_RECOVERABLE",
+  "TRANSPORT_DISTANCE",
+  "BULK_DISCOUNT",
+  "LOCAL_RATE_LOWER",
+  "OTHER",
+]);
 
 // ---------------------------------------------------------------------------
 // GET /handover/pending?device_id=xxx  — no auth
@@ -65,19 +80,20 @@ handoverRouter.get("/pending", async (req, res, next) => {
 // ---------------------------------------------------------------------------
 // POST /handover  (requires recycler session)
 //
-// The recycler submits the inspected condition (and optional downgrade code).
-// Creates the handover row with PENDING_COLLECTOR status; the collector
-// counter-signs in the next call.
+// The recycler submits the inspected condition, the final negotiated unit
+// price, and an optional downgrade code. Creates the handover row with
+// PENDING_COLLECTOR status; the collector counter-signs in the next call.
 //
-// `final_unit_price` is optional. When absent, the price is derived from the
-// accepted rate and the condition factor, as before. When present it wins:
-// the condition grade is a three-step ladder, and a yard that has physically
-// weighed and sorted the material routinely lands between the steps. Refusing
-// to record the number the two parties actually settled on doesn't make the
-// derived number true — it just means the ledger, the anomaly score and the
-// collector's confirmation screen all show a price nobody agreed to.
+// `final_unit_price` is REQUIRED and comes from the recycler. The server used
+// to derive it — accepted rate × a three-step condition factor — and that
+// derived number was never a price anyone had agreed to. A yard that has
+// weighed and sorted the material lands between those steps constantly, and
+// the whole point of the handover is that the two parties settle on a figure
+// and both sign it. The condition ladder survives as a *suggestion* in the
+// console's form (HandoverForm.jsx), which is the right place for it: it seeds
+// the input the recycler can then overwrite.
 //
-// Body: { lot_id, inspected_condition, downgrade_reason_code?, final_unit_price? }
+// Body: { lot_id, inspected_condition, final_unit_price, downgrade_reason_code? }
 // ---------------------------------------------------------------------------
 handoverRouter.post("/", requireSession, async (req, res, next) => {
   try {
@@ -89,22 +105,46 @@ handoverRouter.post("/", requireSession, async (req, res, next) => {
       return res.status(400).json({ error: "lot_id_and_inspected_condition_required" });
     }
 
+    if (!UUID_PATTERN.test(lot_id)) {
+      log.handover.warn("malformed lot_id", { lot_id });
+      return res.status(400).json({ error: "invalid_lot_id", detail: lot_id });
+    }
+
     const VALID_CONDITIONS = new Set(["GOOD", "FAIR", "POOR"]);
     if (!VALID_CONDITIONS.has(inspected_condition)) {
       log.handover.warn("invalid condition", { inspected_condition });
       return res.status(400).json({ error: "invalid_inspected_condition", detail: inspected_condition });
     }
 
-    const lot = await prisma.lot.findUnique({ where: { id: lot_id } });
+    // handover_unit_price_check enforces >= 0 in the database. Rejecting here
+    // means the recycler sees "that isn't a price" instead of a 500.
+    const finalUnitPrice = Number(final_unit_price);
+    if (final_unit_price === undefined || final_unit_price === null || final_unit_price === "") {
+      log.handover.warn("missing final_unit_price", { lot_id });
+      return res.status(400).json({ error: "final_unit_price_required" });
+    }
+    if (!Number.isFinite(finalUnitPrice) || finalUnitPrice < 0) {
+      log.handover.warn("invalid final_unit_price", { lot_id, final_unit_price });
+      return res.status(400).json({ error: "invalid_final_unit_price", detail: final_unit_price });
+    }
+
+    if (downgrade_reason_code != null && downgrade_reason_code !== ""
+        && !DOWNGRADE_REASON_CODES.has(downgrade_reason_code)) {
+      log.handover.warn("invalid downgrade reason", { lot_id, downgrade_reason_code });
+      return res.status(400).json({ error: "invalid_downgrade_reason_code", detail: downgrade_reason_code });
+    }
+
+    const lot = await prisma.lot.findUnique({
+      where: { id: lot_id },
+      include: { category: { select: { code: true } } },
+    });
     if (!lot) {
       log.handover.warn("lot not found", { lot_id });
       return res.status(404).json({ error: "lot_not_found" });
     }
 
-    const acceptance = await prisma.acceptance.findFirst({
-      where: { lotId: lot_id, recyclerId: req.recycler.id, recyclerResponse: "ACKNOWLEDGED" },
-    });
-    if (!acceptance) {
+    const buyerOffer = await getBuyerOfferForLot(lot_id, req.recycler.id);
+    if (buyerOffer.status !== "FOUND") {
       log.handover.warn("no acknowledged acceptance", { lot_id, recycler: req.recycler.id });
       return res.status(403).json({ error: "no_acknowledged_acceptance" });
     }
@@ -130,29 +170,13 @@ handoverRouter.post("/", requireSession, async (req, res, next) => {
       });
     }
 
-    const rate = Number(acceptance.acceptedRate);
     const quantity = Number(lot.quantity);
-    const factor = CONDITION_FACTOR[inspected_condition] ?? 1.0;
-
-    // Derived price is the default; an explicit one from the recycler wins.
-    const derivedUnitPrice = +(rate * factor).toFixed(2);
-    let finalUnitPrice = derivedUnitPrice;
-    if (final_unit_price !== undefined && final_unit_price !== null && final_unit_price !== "") {
-      const override = Number(final_unit_price);
-      // handover_unit_price_check enforces >= 0 in the database. Rejecting
-      // here means the recycler sees "that isn't a price" instead of a 500.
-      if (!Number.isFinite(override) || override < 0) {
-        log.handover.warn("invalid final_unit_price", { lot_id, final_unit_price });
-        return res.status(400).json({ error: "invalid_final_unit_price", detail: final_unit_price });
-      }
-      finalUnitPrice = +override.toFixed(2);
-    }
-    const finalTotal = +(finalUnitPrice * quantity).toFixed(2);
+    const settledUnitPrice = +finalUnitPrice.toFixed(2);
+    const finalTotal = +(settledUnitPrice * quantity).toFixed(2);
 
     log.handover.debug("pricing", {
-      rate, quantity, condition: inspected_condition, factor,
-      derivedUnitPrice, finalUnitPrice, finalTotal,
-      overridden: finalUnitPrice !== derivedUnitPrice,
+      buyerOffer: buyerOffer.price, quantity, condition: inspected_condition,
+      finalUnitPrice: settledUnitPrice, finalTotal,
     });
 
     const now = new Date();
@@ -162,9 +186,12 @@ handoverRouter.post("/", requireSession, async (req, res, next) => {
     const handover = await prisma.handover.create({
       data: {
         id, lotId: lot_id, recyclerId: req.recycler.id, referenceCode,
-        inspectedQuantity: quantity, finalUnitPrice, finalTotal,
+        inspectedQuantity: quantity,
+        finalUnitPrice: settledUnitPrice, finalTotal,
+        buyerOfferSnapshot: buyerOffer.price,
+        buyerOfferUnit: buyerOffer.unit,
         inspectedCondition: inspected_condition,
-        downgradeReasonCode: downgrade_reason_code ?? null,
+        downgradeReasonCode: downgrade_reason_code || null,
         handoverTs: now, recyclerConfirmedAt: now, status: "PENDING_COLLECTOR",
       },
     });
@@ -172,8 +199,10 @@ handoverRouter.post("/", requireSession, async (req, res, next) => {
     log.handover.info("handover created", { id, lot_id, finalTotal, referenceCode });
 
     scoreHandover({
-      handoverId: id, lotId: lot_id, recyclerId: req.recycler.id, categoryId: lot.categoryId,
-      buyerOffer: rate, finalPrice: finalUnitPrice, condition: inspected_condition,
+      handoverId: id, lotId: lot_id, recyclerId: req.recycler.id, collectorId: lot.collectorId,
+      categoryId: lot.categoryId, categoryCode: lot.category?.code ?? null,
+      buyerOffer: buyerOffer.price, buyerOfferUnit: buyerOffer.unit,
+      finalPrice: settledUnitPrice, condition: inspected_condition,
     }).catch((err) => log.handover.warn("score fire-and-forget failed", err));
 
     return res.status(200).json({
@@ -223,22 +252,73 @@ async function marketReferencePrice(categoryId, excludeRecyclerId) {
 }
 
 /**
+ * Where the reference price for a transaction comes from, best source first.
+ *
+ * reference_price must be an INDEPENDENT yardstick, not this recycler's own
+ * published rate. Sending the same value for reference_price and
+ * buyer_offer_per_kg pins buyer_reference_ratio at a constant 1.0 and
+ * collapses negotiation_gap_pct into abs_price_deviation_pct — the deployed
+ * model ends up running on two independent signals out of five instead of the
+ * four it was designed around.
+ *
+ *   RESOLVED       Metal Mandi, the published external scrap rate. Best: it is
+ *                  outside the transaction entirely, so no party to the deal
+ *                  can move it.
+ *   MARKET_MEDIAN  the median rate other VALID recyclers publish for this
+ *                  category. Usable, but circular in the small — the people
+ *                  being scored are the ones setting it.
+ *   BUYER_FALLBACK the buyer's own accepted rate. A degraded score, and the
+ *                  status records that honestly so a flag raised on it can be
+ *                  read for what it is.
+ */
+async function resolveReferencePrice({ categoryCode, categoryId, recyclerId, buyerOffer, buyerOfferUnit }) {
+  if (categoryCode) {
+    const external = await getReferencePrice(categoryCode).catch((err) => {
+      log.handover.warn("metal mandi lookup failed", { reason: err?.message });
+      return null;
+    });
+    if (external?.status === "RESOLVED" && external.price != null) {
+      return { price: external.price, unit: external.unit, status: "RESOLVED" };
+    }
+  }
+
+  const median = await marketReferencePrice(categoryId, recyclerId);
+  if (median != null) {
+    return { price: median, unit: buyerOfferUnit, status: "MARKET_MEDIAN" };
+  }
+
+  return { price: buyerOffer, unit: buyerOfferUnit, status: "BUYER_FALLBACK" };
+}
+
+/**
  * Fire-and-forget: call the Vercel ML model and persist any anomaly flag.
  * Never throws — callers must catch().
  */
-async function scoreHandover({ handoverId, lotId, recyclerId, categoryId, buyerOffer, finalPrice, condition }) {
-  // reference_price must be a MARKET reference, not this recycler's own
-  // published rate. Sending the same value for reference_price and
-  // buyer_offer_per_kg (the old behaviour) pins buyer_reference_ratio at a
-  // constant 1.0 and collapses negotiation_gap_pct into abs_price_deviation_pct
-  // — the deployed model ends up running on two independent signals out of
-  // five instead of the four it was designed around. Falls back to the
-  // buyer's own rate only when no other VALID recycler publishes a rate for
-  // this category: a degraded score beats no score.
-  const referencePrice = (await marketReferencePrice(categoryId, recyclerId)) ?? buyerOffer;
+async function scoreHandover({
+  handoverId, lotId, recyclerId, collectorId, categoryId, categoryCode,
+  buyerOffer, buyerOfferUnit, finalPrice, condition,
+}) {
+  const reference = await resolveReferencePrice({
+    categoryCode, categoryId, recyclerId, buyerOffer, buyerOfferUnit,
+  });
+
+  // Record what the score was computed against BEFORE calling the model, so
+  // the number survives a model outage. Without this the reference lived only
+  // in a log line, and a flag could never be re-checked or explained after the
+  // fact. Resolving here rather than before handover.create keeps both lookups
+  // off /handover's response path — the two parties are standing at the gate
+  // waiting for it.
+  await prisma.handover.update({
+    where: { id: handoverId },
+    data: {
+      referencePriceSnapshot: reference.price,
+      referencePriceUnit: reference.unit,
+      referencePriceStatus: reference.status,
+    },
+  }).catch((err) => log.handover.warn("reference snapshot write failed", { reason: err?.message }));
 
   const result = await callPredict({
-    reference_price: referencePrice,
+    reference_price: reference.price,
     buyer_offer_per_kg: buyerOffer,
     final_price_per_kg: finalPrice,
     condition,
@@ -248,6 +328,15 @@ async function scoreHandover({ handoverId, lotId, recyclerId, categoryId, buyerO
     console.log(`[handover/score] fail-open: ${result.reason}`);
     return;
   }
+
+  // Only a handover the model actually verdicted counts toward either
+  // party's flag rate (see entityAnomaly.js). Set here, not alongside the
+  // reference snapshot above, precisely because this line is unreachable on
+  // an outage.
+  await prisma.handover.update({
+    where: { id: handoverId },
+    data: { mlScoredAt: new Date() },
+  }).catch((err) => log.handover.warn("ml-scored-at write failed", { reason: err?.message }));
 
   const { anomaly, score, risk_level, features } = result.body;
   console.log(`[handover/score] lot=${lotId} anomaly=${anomaly} score=${score} risk=${risk_level}`);
@@ -262,6 +351,15 @@ async function scoreHandover({ handoverId, lotId, recyclerId, categoryId, buyerO
         detectorCode: "ML_PRICE_ANOMALY",
         severity,
         detail: {
+          // Who the flag is about. A flag that names only a handover id makes
+          // the reviewer join three tables before they know whose transaction
+          // they are looking at.
+          collector_id: collectorId,
+          recycler_id: recyclerId,
+          reference_price: reference.price,
+          reference_price_status: reference.status,
+          buyer_offer_per_kg: buyerOffer,
+          final_price_per_kg: finalPrice,
           score,
           risk_level,
           features,
@@ -269,6 +367,16 @@ async function scoreHandover({ handoverId, lotId, recyclerId, categoryId, buyerO
       },
     }).catch((err) => console.warn("[handover/score] flag write error:", err.message));
   }
+
+  // Whether THIS transaction was flagged or not, both parties' flag rates
+  // need re-checking: a clean transaction can pull a party's rate back below
+  // FLAG_RATE_THRESHOLD just as an anomalous one can push it over. See
+  // entityAnomaly.js — this is the party-level verdict that replaces the
+  // rule-based detectors (D1-D13) for the live product.
+  await Promise.all([
+    refreshEntityFlagRate("RECYCLER", recyclerId),
+    refreshEntityFlagRate("COLLECTOR", collectorId),
+  ]);
 }
 
 // ---------------------------------------------------------------------------
@@ -357,13 +465,9 @@ handoverRouter.post("/:lot_id/dispute", async (req, res, next) => {
       lot_id, handover_id: updated.id, final_total: Number(updated.finalTotal),
     });
 
-    // A disputed price is exactly the kind of event the detectors exist to
-    // notice. Same fail-open rule as the confirm path: never awaited, never
-    // allowed to cost the collector their recorded protest.
-    void runDetection(prisma, {}).catch((err) => {
-      log.detect.warn("post-dispute detection failed", { reason: err?.message });
-    });
-
+    // No detection to trigger here: the model already scored this handover
+    // at POST /handover (scoreHandover), and a dispute changes neither the
+    // price the model saw nor either party's flag rate.
     return res.status(200).json({
       handover_id: updated.id,
       lot_id: updated.lotId,
@@ -413,19 +517,9 @@ handoverRouter.post("/:lot_id/confirm", async (req, res, next) => {
     // final_price = final_total from the handover row (already computed at POST /handover)
     const final_price = Number(updated.finalTotal);
 
-    // Detection is the entire AI/ML claim, and before this it only ran when a
-    // logged-in recycler manually POSTed /detect-run — which nothing did. In a
-    // deployed configuration D1-D13 therefore never fired at all.
-    //
-    // Fired AFTER the update has committed and deliberately NOT awaited: the
-    // same fail-open rule that governs callDetect governs this. A detector
-    // outage must never cost a collector their counter-signature, and a slow
-    // aiml service must never add latency to the handover that both parties are
-    // standing there waiting for.
-    void runDetection(prisma, {}).catch((err) => {
-      log.detect.warn("post-confirm detection failed", { reason: err?.message });
-    });
-
+    // No detection to trigger here either, for the same reason as the
+    // dispute path above — the model already scored this handover at
+    // POST /handover.
     return res.status(200).json({
       handover_id: updated.id,
       lot_id: updated.lotId,

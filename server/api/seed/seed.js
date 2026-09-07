@@ -4,6 +4,7 @@ import { parse } from "csv-parse/sync";
 import { PrismaClient } from "@prisma/client";
 import { hashPassword } from "../src/lib/password.js";
 import { PARENTS, CHILDREN, DEMO_COORDS, DEMO_RATES } from "./categories.js";
+import { seedMetalMandi } from "./seedMetalMandi.js";
 
 const CSV_PATH = fileURLToPath(new URL("../../../mpcb_recyclers.csv", import.meta.url));
 
@@ -178,7 +179,17 @@ export async function seedAll(prisma) {
   const categoryCodes = [...byCode.keys()];
   const recyclers = await seedRecyclers(prisma, categoryCodes);
   const { accounts, rates } = await seedRatesAndAccounts(prisma, recyclers, byCode);
-  return { categories: byCode.size, recyclers: recyclers.length, accounts: accounts.length, rates: rates.length };
+  // The external price reference. Runs after categories, because the mapping
+  // it writes is keyed on Category.code.
+  const metalMandi = await seedMetalMandi(prisma);
+  return {
+    categories: byCode.size,
+    recyclers: recyclers.length,
+    accounts: accounts.length,
+    rates: rates.length,
+    referencePrices: metalMandi.raw.imported,
+    referenceCategoriesResolved: metalMandi.mapping.resolved,
+  };
 }
 
 // Run directly: `npm run seed`

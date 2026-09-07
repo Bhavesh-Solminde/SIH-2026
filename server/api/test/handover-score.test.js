@@ -16,7 +16,6 @@ const callPredictMock = vi.fn(async () => ({ ok: false, reason: "mocked" }));
 
 vi.mock("../src/lib/aiml.js", () => ({
   callPredict: (...args) => callPredictMock(...args),
-  callDetect: vi.fn(async () => ({ ok: false, reason: "mocked" })),
 }));
 
 const { createApp } = await import("../src/app.js");
@@ -96,7 +95,9 @@ describe("POST /handover — market reference fed to the price model", () => {
 
     const app = createApp();
     const agent = await loginAgent(app, buyerAccount.email);
-    const res = await agent.post("/handover").send({ lot_id: lot.id, inspected_condition: "GOOD" });
+    const res = await agent.post("/handover").send({
+      lot_id: lot.id, inspected_condition: "GOOD", final_unit_price: 380,
+    });
     expect(res.status).toBe(200);
 
     await waitForPredict();
@@ -122,7 +123,9 @@ describe("POST /handover — market reference fed to the price model", () => {
 
     const app = createApp();
     const agent = await loginAgent(app, buyerAccount.email);
-    const res = await agent.post("/handover").send({ lot_id: lot.id, inspected_condition: "GOOD" });
+    const res = await agent.post("/handover").send({
+      lot_id: lot.id, inspected_condition: "GOOD", final_unit_price: 380,
+    });
     expect(res.status).toBe(200);
 
     await waitForPredict();

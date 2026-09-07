@@ -21,13 +21,15 @@ export default function FlagsPage() {
     if (recycler) load();
   }, [recycler, load]);
 
-  // The async trigger on handover-confirm covers the natural path. This covers
-  // the demo path: force a run on stage and show what came back, so an empty
-  // list is never ambiguous between "nothing wrong" and "nothing ran".
+  // The automatic path is scoreHandover firing on every POST /handover — it
+  // recomputes this recycler's own flag rate the moment a new transaction is
+  // scored. This button is the demo path: force a recheck on stage and show
+  // what came back, so an empty list is never ambiguous between "nothing
+  // wrong" and "nothing ran".
   async function handleRun() {
     setRunning(true);
     try {
-      const result = await api.post("/detect-run", {});
+      const result = await api.post("/recycler/anomaly/recheck", {});
       setLastRun(result);
       await load();
     } catch (err) {
@@ -46,33 +48,32 @@ export default function FlagsPage() {
         <h1>Flags</h1>
 
         <button type="button" onClick={handleRun} disabled={running}>
-          {running ? "Running detection…" : "Run detection"}
+          {running ? "Rechecking…" : "Recheck my flag rate"}
         </button>
 
-        {lastRun?.status === "ok" && (
-          <p>
-            {lastRun.flagsWritten} flags written from {lastRun.detectorsRun?.length ?? 0} detectors.
-            {lastRun.detectorsSkipped?.length > 0 && (
-              <>
-                {" "}Skipped:{" "}
-                {/* Skip.to_dict() serialises as { code, reason } — see
-                    server/aiml/bhaav_aiml/models.py. */}
-                {lastRun.detectorsSkipped
-                  .map((s) => `${s.code} (${s.reason})`)
-                  .join(", ")}
-              </>
-            )}
+        {lastRun?.status === "flagged" && (
+          <p role="alert">
+            {lastRun.flagged} of your last {lastRun.total} scored transactions were flagged by the
+            price model ({Math.round(lastRun.rate * 100)}%, over the {Math.round(lastRun.threshold * 100)}% line).
           </p>
         )}
 
-        {lastRun?.status === "pending" && (
-          <p role="alert">
-            Detector service unavailable — no flags were written. {lastRun.reason}
+        {lastRun?.status === "clear" && (
+          <p>
+            {lastRun.flagged} of your last {lastRun.total} scored transactions were flagged by the
+            price model — under the line.
+          </p>
+        )}
+
+        {lastRun?.status === "insufficient_history" && (
+          <p>
+            Not enough scored transactions yet ({lastRun.total} of {lastRun.minSample} needed) to
+            compute a flag rate.
           </p>
         )}
 
         {lastRun?.status === "error" && (
-          <p role="alert">Detector service unavailable — {lastRun.reason}</p>
+          <p role="alert">Recheck failed — {lastRun.reason}</p>
         )}
 
         {flags.length === 0 && (

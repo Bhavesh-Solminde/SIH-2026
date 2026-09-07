@@ -231,6 +231,14 @@ There is no labelled set of "true frauds," so accuracy cannot be reported. Two d
 
 ## 9. Known limitations — say these before a judge finds them
 
+> **Superseded (2026-09-07):** point 1 below described the shipped decision as it stood
+> through the internal round — rule-based detectors, no model in the live path. That has since
+> changed: the live product now scores every transaction with the deployed price model
+> (`POST /predict`) and decides RECYCLER/COLLECTOR-level anomaly status from the share of a
+> party's own scored transactions the model flagged, not from D1–D13. See
+> `AI-ANOMALY-SPEC.md` §0.1 for the full note and `server/api/src/lib/entityAnomaly.js` for the
+> implementation. Points 2–6 below are otherwise unaffected — read point 1 as historical.
+
 1. **No trained model ships at the internal round.** Detectors are rules with tuned thresholds.
 2. **Seven of eleven in-scope detectors (D2, D3, D9, D10, D11, D12, D13) cannot be validated against real transaction history** — there isn't enough of it yet. They are specified, implemented, and demonstrated against simulated adversarial profiles instead (`bhaav_aiml/evaluate.py`: recall 1.0, precision 1.0 on the three planted bad actors). D1, D6, D7, D8 work from the first real transaction.
 3. **The price dataset is small and non-representative** — one city, one week, a handful of respondents.
@@ -254,7 +262,7 @@ There is no labelled set of "true frauds," so accuracy cannot be reported. Two d
 8. Populate `expected_weight_min/max` from field data → D4, D5 — **still open, still blocks D4/D5 permanently**
 9. Image corpus accumulation with labels — collect, do not train — **still open, unchanged**
 
-**Detection now fires automatically** after every confirmed handover (fail-open, un-awaited — a detector-service outage never blocks a sale) and can also be triggered on demand from the console's flags page. `GET /recycler/flags` excludes `INFO` severity by default (`?includeInfo=1` returns all) because D1 alone fires on roughly a third of handovers against a 5% alert budget — the budget is enforced at the presentation boundary, not by raising the threshold.
+**Historical — see the superseded note above.** This paragraph described detection firing on every confirmed handover via `POST /detect`; that call no longer exists. Scoring now happens once, at handover creation, via the deployed price model, with the result aggregated per party (`entityAnomaly.js`) rather than run per-detector — the `includeInfo` / D1 alert-budget mechanics described here no longer apply, since D1 is not in the live path. `GET /recycler/flags` still exists and still excludes `resolvedAt`-set flags by default; it now serves `ML_PRICE_ANOMALY` (per-transaction) and `ML_FLAG_RATE` (per-party) flags instead.
 
 ---
 
