@@ -131,6 +131,39 @@ describe("POST /recycler/acceptances/:id/respond", () => {
     expect(row.recyclerResponse).toBe("DECLINED");
   });
 
+  // Before this, /respond touched only the acceptance row — the lot itself
+  // never left its prior status, and POST /lots/:id/depart requires
+  // status === "ACCEPTED" before a collector can move it. A recycler
+  // confirming a lot must leave the lot record readable as claimed.
+  it("ACCEPT also moves the lot to ACCEPTED", async () => {
+    const app = createApp();
+    const { acceptance, lot } = await setupFull();
+    const agent = await loginAgent(app);
+
+    const res = await agent
+      .post(`/recycler/acceptances/${acceptance.id}/respond`)
+      .send({ action: "ACCEPT" });
+
+    expect(res.status).toBe(200);
+    const row = await prisma.lot.findUnique({ where: { id: lot.id } });
+    expect(row.status).toBe("ACCEPTED");
+  });
+
+  it("REJECT leaves the lot's status unchanged", async () => {
+    const app = createApp();
+    const { acceptance, lot } = await setupFull();
+    const before = await prisma.lot.findUnique({ where: { id: lot.id } });
+    const agent = await loginAgent(app);
+
+    const res = await agent
+      .post(`/recycler/acceptances/${acceptance.id}/respond`)
+      .send({ action: "REJECT" });
+
+    expect(res.status).toBe(200);
+    const after = await prisma.lot.findUnique({ where: { id: lot.id } });
+    expect(after.status).toBe(before.status);
+  });
+
   it("invalid action → 400", async () => {
     const app = createApp();
     const { acceptance } = await setupFull();

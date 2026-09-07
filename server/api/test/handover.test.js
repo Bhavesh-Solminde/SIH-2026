@@ -72,12 +72,14 @@ describe("POST /handover", () => {
     const res = await agent.post("/handover").send({
       lot_id: lot.id,
       inspected_condition: "GOOD",
+      final_unit_price: 323,
     });
 
     expect(res.status).toBe(200);
     expect(res.body.handover_id).toBeTruthy();
     expect(res.body.lot_id).toBe(lot.id);
     expect(res.body.inspected_condition).toBe("GOOD");
+    expect(res.body.final_unit_price).toBe(323);
     expect(res.body.completed_at).toBeTruthy();
 
     // Verify the row was actually created in the DB
@@ -98,6 +100,7 @@ describe("POST /handover", () => {
     const res = await agent.post("/handover").send({
       lot_id: lot.id,
       inspected_condition: "FAIR",
+      final_unit_price: 300,
     });
 
     expect(res.status).toBe(403);
@@ -113,12 +116,14 @@ describe("POST /handover", () => {
     const first = await agent.post("/handover").send({
       lot_id: lot.id,
       inspected_condition: "GOOD",
+      final_unit_price: 323,
     });
     expect(first.status).toBe(200);
 
     const second = await agent.post("/handover").send({
       lot_id: lot.id,
       inspected_condition: "FAIR",
+      final_unit_price: 300,
     });
     expect(second.status).toBe(409);
     expect(second.body.error).toBe("handover_already_exists");
@@ -133,6 +138,7 @@ describe("POST /handover", () => {
     const res = await agent.post("/handover").send({
       lot_id: uuidv7(),
       inspected_condition: "GOOD",
+      final_unit_price: 323,
     });
 
     expect(res.status).toBe(404);
@@ -144,8 +150,95 @@ describe("POST /handover", () => {
     const res = await request(createApp()).post("/handover").send({
       lot_id: lot.id,
       inspected_condition: "GOOD",
+      final_unit_price: 323,
     });
     expect(res.status).toBe(401);
+  });
+
+  // final_unit_price is what the recycler and collector actually settle on —
+  // the server does not derive it. Omitting it, or sending something that
+  // isn't a valid price, must fail before any other lookup runs.
+  it("400 — final_unit_price is required", async () => {
+    const app = createApp();
+    const { account, lot } = await setupFull({ recyclerResponse: "ACKNOWLEDGED" });
+    const agent = await loginAgent(app, account.email);
+
+    const res = await agent.post("/handover").send({
+      lot_id: lot.id,
+      inspected_condition: "GOOD",
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("final_unit_price_required");
+  });
+
+  it("400 — negative final_unit_price is rejected", async () => {
+    const app = createApp();
+    const { account, lot } = await setupFull({ recyclerResponse: "ACKNOWLEDGED" });
+    const agent = await loginAgent(app, account.email);
+
+    const res = await agent.post("/handover").send({
+      lot_id: lot.id,
+      inspected_condition: "GOOD",
+      final_unit_price: -5,
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("invalid_final_unit_price");
+  });
+
+  it("400 — malformed lot_id", async () => {
+    const app = createApp();
+    const { account } = await setupFull({ recyclerResponse: "ACKNOWLEDGED" });
+    const agent = await loginAgent(app, account.email);
+
+    const res = await agent.post("/handover").send({
+      lot_id: "not-a-uuid",
+      inspected_condition: "GOOD",
+      final_unit_price: 323,
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("invalid_lot_id");
+  });
+
+  it("400 — downgrade_reason_code outside the known set", async () => {
+    const app = createApp();
+    const { account, lot } = await setupFull({ recyclerResponse: "ACKNOWLEDGED" });
+    const agent = await loginAgent(app, account.email);
+
+    const res = await agent.post("/handover").send({
+      lot_id: lot.id,
+      inspected_condition: "POOR",
+      final_unit_price: 250,
+      downgrade_reason_code: "MADE_UP_REASON",
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("invalid_downgrade_reason_code");
+  });
+
+  it("stores the recycler-supplied price verbatim, unmodified by condition", async () => {
+    const app = createApp();
+    const { account, lot } = await setupFull({ recyclerResponse: "ACKNOWLEDGED" });
+    const agent = await loginAgent(app, account.email);
+
+    // accepted_rate is 380/kg and quantity is 3 (see setupFull/makeLot), but
+    // the settled price is whatever the two parties agreed — here, neither
+    // the accepted rate nor a condition-factor multiple of it.
+    const res = await agent.post("/handover").send({
+      lot_id: lot.id,
+      inspected_condition: "POOR",
+      final_unit_price: 410,
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.final_unit_price).toBe(410);
+    expect(res.body.final_total).toBe(1230); // 410 × 3
+
+    const row = await prisma.handover.findUnique({ where: { lotId: lot.id } });
+    expect(Number(row.finalUnitPrice)).toBe(410);
+    expect(Number(row.finalTotal)).toBe(1230);
   });
 });
 
@@ -165,6 +258,7 @@ describe("POST /handover/:lot_id/confirm", () => {
     const postRes = await agent.post("/handover").send({
       lot_id: lot.id,
       inspected_condition: "GOOD",
+      final_unit_price: 323,
     });
     expect(postRes.status).toBe(200);
     const handover_id = postRes.body.handover_id;
@@ -198,6 +292,7 @@ describe("POST /handover/:lot_id/confirm", () => {
     await agent.post("/handover").send({
       lot_id: lot.id,
       inspected_condition: "FAIR",
+      final_unit_price: 300,
     });
 
     // First confirm
@@ -222,24 +317,23 @@ describe("POST /handover/:lot_id/confirm", () => {
     expect(res.status).toBe(404);
   });
 
-  // Test 6: Final price calculation — verify rate × quantity × condition_factor
-  it("final price calculation — rate × quantity × condition_factor", async () => {
+  // Test 6: final price is what the recycler typed at POST /handover — the
+  // server no longer derives it from accepted_rate × a condition factor
+  // (that ladder now only seeds a suggestion in the console's form).
+  it("final price at /confirm is the recycler-settled price, quantity-scaled", async () => {
     const app = createApp();
-    const { account, lot, acceptance } = await setupFull({ recyclerResponse: "ACKNOWLEDGED" });
+    const { account, lot } = await setupFull({ recyclerResponse: "ACKNOWLEDGED" });
     const agent = await loginAgent(app, account.email);
 
-    // Use FAIR condition: factor = 0.85
-    // accepted_rate = 380.00, quantity = 3.000 (from makeLot)
-    // final_unit_price = 380 × 0.85 = 323.00
-    // final_total = 323 × 3 = 969.00
-    const expectedRate = Number(acceptance.acceptedRate);   // 380
-    const expectedFactor = 0.85;                           // FAIR
-    const expectedUnitPrice = +(expectedRate * expectedFactor).toFixed(2); // 323.00
-    const expectedTotal = +(expectedUnitPrice * Number(lot.quantity)).toFixed(2); // 969.00
+    // Deliberately NOT accepted_rate (380) times any condition factor —
+    // this is the number the two parties settled on after inspection.
+    const settledUnitPrice = 405;
+    const expectedTotal = +(settledUnitPrice * Number(lot.quantity)).toFixed(2); // × 3
 
     await agent.post("/handover").send({
       lot_id: lot.id,
       inspected_condition: "FAIR",
+      final_unit_price: settledUnitPrice,
     });
 
     const confirmRes = await request(app)
@@ -251,7 +345,7 @@ describe("POST /handover/:lot_id/confirm", () => {
 
     // Also verify the stored values
     const row = await prisma.handover.findUnique({ where: { lotId: lot.id } });
-    expect(Number(row.finalUnitPrice)).toBeCloseTo(expectedUnitPrice, 2);
+    expect(Number(row.finalUnitPrice)).toBeCloseTo(settledUnitPrice, 2);
     expect(Number(row.finalTotal)).toBeCloseTo(expectedTotal, 2);
   });
 });

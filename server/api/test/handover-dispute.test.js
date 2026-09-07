@@ -72,7 +72,7 @@ describe("POST /handover/:lot_id/dispute", () => {
     const app = createApp();
     const { account, lot } = await setupFull();
     const agent = await loginAgent(app, account.email);
-    await agent.post("/handover").send({ lot_id: lot.id, inspected_condition: "POOR" });
+    await agent.post("/handover").send({ lot_id: lot.id, inspected_condition: "POOR", final_unit_price: 266 });
 
     const res = await request(app).post(`/handover/${lot.id}/dispute`).send({});
 
@@ -91,7 +91,7 @@ describe("POST /handover/:lot_id/dispute", () => {
     const app = createApp();
     const { account, lot } = await setupFull();
     const agent = await loginAgent(app, account.email);
-    await agent.post("/handover").send({ lot_id: lot.id, inspected_condition: "FAIR" });
+    await agent.post("/handover").send({ lot_id: lot.id, inspected_condition: "FAIR", final_unit_price: 323 });
 
     await request(app).post(`/handover/${lot.id}/dispute`).send({});
     const second = await request(app).post(`/handover/${lot.id}/dispute`).send({});
@@ -104,7 +104,7 @@ describe("POST /handover/:lot_id/dispute", () => {
     const app = createApp();
     const { account, lot } = await setupFull();
     const agent = await loginAgent(app, account.email);
-    await agent.post("/handover").send({ lot_id: lot.id, inspected_condition: "GOOD" });
+    await agent.post("/handover").send({ lot_id: lot.id, inspected_condition: "GOOD", final_unit_price: 380 });
     await request(app).post(`/handover/${lot.id}/confirm`).send();
 
     const res = await request(app).post(`/handover/${lot.id}/dispute`).send({});
@@ -138,7 +138,7 @@ describe("GET /handover/by-lot/:lot_id", () => {
     const app = createApp();
     const { account, lot } = await setupFull();
     const agent = await loginAgent(app, account.email);
-    await agent.post("/handover").send({ lot_id: lot.id, inspected_condition: "FAIR" });
+    await agent.post("/handover").send({ lot_id: lot.id, inspected_condition: "FAIR", final_unit_price: 323 });
 
     const res = await request(app).get(`/handover/by-lot/${lot.id}`);
 
@@ -146,7 +146,7 @@ describe("GET /handover/by-lot/:lot_id", () => {
     expect(res.body.handover.lot_id).toBe(lot.id);
     expect(res.body.handover.status).toBe("PENDING_COLLECTOR");
     expect(res.body.handover.inspected_condition).toBe("FAIR");
-    // 380 × 0.85 = 323, over a 3 KG lot.
+    // The recycler-settled price, over a 3 KG lot.
     expect(res.body.handover.final_unit_price).toBeCloseTo(323, 2);
     expect(res.body.handover.final_total).toBeCloseTo(969, 2);
     expect(res.body.handover.collector_confirmed_at).toBeNull();
@@ -164,17 +164,18 @@ describe("GET /handover/by-lot/:lot_id", () => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /handover — explicit final price
+// POST /handover — the recycler-settled final price
 // ---------------------------------------------------------------------------
-describe("POST /handover with an explicit final_unit_price", () => {
+describe("POST /handover with a recycler-settled final_unit_price", () => {
   beforeEach(() => truncateAll());
 
-  it("stores the price the recycler sent instead of the grade-derived one", async () => {
+  it("stores the price the recycler sent, not a grade-derived one", async () => {
     const app = createApp();
     const { account, lot } = await setupFull();
     const agent = await loginAgent(app, account.email);
 
-    // GOOD would derive 380 × 1.0 = 380. The yard settled on 402.50.
+    // GOOD's old derivation would have been 380 × 1.0 = 380. The yard
+    // settled on 402.50 instead — that is the number that must be stored.
     const res = await agent.post("/handover").send({
       lot_id: lot.id,
       inspected_condition: "GOOD",
@@ -191,7 +192,7 @@ describe("POST /handover with an explicit final_unit_price", () => {
     expect(Number(row.finalTotal)).toBeCloseTo(1207.5, 2);
   });
 
-  it("still derives the price from the condition factor when none is sent", async () => {
+  it("400s when no price is sent — the server no longer derives one", async () => {
     const app = createApp();
     const { account, lot } = await setupFull();
     const agent = await loginAgent(app, account.email);
@@ -201,9 +202,9 @@ describe("POST /handover with an explicit final_unit_price", () => {
       inspected_condition: "POOR",
     });
 
-    // 380 × 0.7 = 266, over 3 KG.
-    expect(res.body.final_unit_price).toBeCloseTo(266, 2);
-    expect(res.body.final_total).toBeCloseTo(798, 2);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("final_unit_price_required");
+    expect(await prisma.handover.findUnique({ where: { lotId: lot.id } })).toBeNull();
   });
 
   it("rejects a negative price rather than letting the database constraint 500", async () => {
@@ -241,16 +242,17 @@ describe("POST /handover with an explicit final_unit_price", () => {
     const app = createApp();
     const { account, lot } = await setupFull();
     const agent = await loginAgent(app, account.email);
-    await agent.post("/handover").send({ lot_id: lot.id, inspected_condition: "GOOD" });
+    await agent.post("/handover").send({ lot_id: lot.id, inspected_condition: "GOOD", final_unit_price: 380 });
 
     // The console hits this whenever a recycler reloads /verify?ref=… after
     // submitting; it needs the whole row back, not just an error string.
-    const res = await agent.post("/handover").send({ lot_id: lot.id, inspected_condition: "POOR" });
+    const res = await agent.post("/handover").send({ lot_id: lot.id, inspected_condition: "POOR", final_unit_price: 266 });
 
     expect(res.status).toBe(409);
     expect(res.body.error).toBe("handover_already_exists");
     expect(res.body.status).toBe("PENDING_COLLECTOR");
     expect(res.body.inspected_condition).toBe("GOOD");
+    // 380 × 3 KG (the first call's settled price), not the second call's.
     expect(res.body.final_total).toBeCloseTo(1140, 2);
     expect(res.body.reference_code).toBeTruthy();
   });

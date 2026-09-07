@@ -1,27 +1,28 @@
 import { log } from "./logger.js";
 
-/**
- * Two ML services, two URLs. They are NOT interchangeable and a single
- * AIML_URL cannot serve both:
- *
- *   PREDICT  — the deployed model, POST /predict. Single-transaction price
- *              scoring. Fires automatically on every handover.
- *   DETECT   — server/aiml (FastAPI), POST /detect. The eleven pattern
- *              detectors from AI.md. Needs a whole history, not one row.
- *
- * Pointing both at one host silently 404s whichever route that host lacks,
- * and the failure is invisible because both callers fail open.
- */
+// A configured value that already ends in /predict would produce
+// ".../predict/predict" — a 404 that callPredict then swallows, because it
+// fails open. Normalise it away instead: pasting the full endpoint URL into
+// the env var is the obvious mistake to make, and it is invisible when it
+// happens.
+const trimBase = (value, path) =>
+  value?.replace(/\/+$/, "").replace(new RegExp(`${path}$`), "") ?? null;
+
 const PREDICT_BASE = () =>
-  process.env.AIML_PREDICT_URL ?? process.env.AIML_URL ?? "https://sihmodel.vercel.app";
-const DETECT_BASE = () =>
-  process.env.AIML_DETECT_URL ?? process.env.AIML_URL ?? null;
+  trimBase(process.env.AIML_PREDICT_URL ?? process.env.AIML_URL ?? "https://sihmodel.vercel.app", "/predict");
 
 /**
  * callPredict — calls the deployed Vercel ML model at /predict.
  *
  * Payload: { reference_price, buyer_offer_per_kg, final_price_per_kg, condition }
  * Response: { anomaly, score, threshold, risk_level, features }
+ *
+ * This is the ONLY anomaly source the live product uses. The eleven
+ * rule-based pattern detectors (D1-D13, server/aiml's FastAPI /detect
+ * endpoint) are no longer called from here — see AI.md §9 and
+ * AI-ANOMALY-SPEC.md §0.1 for the superseded note, and entityAnomaly.js for
+ * what replaced them: this model's per-transaction verdict, aggregated per
+ * recycler/collector.
  *
  * FAIL-OPEN: errors return { ok: false } — caller must not block transactions.
  */
@@ -52,50 +53,6 @@ export async function callPredict(payload, { url, timeoutMs } = {}) {
   } catch (err) {
     const reason = err.name === "AbortError" ? `timeout after ${ms}ms` : err.message;
     log.aiml.warn("callPredict: fetch failed", { reason });
-    return { ok: false, reason };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-/**
- * callDetect — calls server/aiml POST /detect, the eleven pattern detectors.
- *
- * This is the detector suite AI.md describes; it is NOT the same service as
- * callPredict. FAIL-OPEN: a detector outage must never block a sale.
- */
-export async function callDetect(payload, { url, timeoutMs } = {}) {
-  const base = url ?? DETECT_BASE();
-  if (!base) {
-    log.aiml.warn("callDetect: AIML_DETECT_URL not configured");
-    return { ok: false, reason: "AIML_DETECT_URL is not configured" };
-  }
-
-  const ms = Number(timeoutMs ?? process.env.AIML_TIMEOUT_MS ?? 2000);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ms);
-
-  log.aiml.debug("callDetect →", { url: `${base}/detect` });
-
-  try {
-    const res = await fetch(`${base}/detect`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-
-    if (!res.ok) {
-      log.aiml.warn("callDetect: aiml error", { status: res.status });
-      return { ok: false, reason: `aiml responded ${res.status}` };
-    }
-
-    const body = await res.json();
-    log.aiml.info("callDetect ←", { flags: body.flags?.length ?? 0 });
-    return { ok: true, body };
-  } catch (err) {
-    const reason = err.name === "AbortError" ? `timeout after ${ms}ms` : err.message;
-    log.aiml.warn("callDetect: fetch failed", { reason });
     return { ok: false, reason };
   } finally {
     clearTimeout(timer);

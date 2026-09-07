@@ -4,6 +4,8 @@ import { requireSession } from "../middleware/requireSession.js";
 import { log, logger } from "../lib/logger.js";
 import { referenceCodeFromUuid } from "@bhaav/core/ids";
 import { sendSms, smsEnabled } from "../lib/sms.js";
+import { callPredict } from "../lib/aiml.js";
+import { refreshEntityFlagRate } from "../lib/entityAnomaly.js";
 
 // The pre-built `log` export has no `sms` namespace — same situation
 // lib/sms.js and routes/public.js document for themselves.
@@ -205,9 +207,24 @@ recyclerRouter.post("/acceptances/:id/respond", async (req, res, next) => {
     }
 
     const response = canonical === "ACCEPT" ? "ACKNOWLEDGED" : "DECLINED";
-    const updated = await prisma.acceptance.update({
-      where: { id },
-      data: { recyclerResponse: response, responseTs: new Date() },
+
+    // Accepting used to update only the acceptance row, so the lot itself
+    // never left LISTED — and POST /lots/:id/depart requires status ACCEPTED
+    // before a collector can move it, so the flow dead-ended right after the
+    // recycler confirmed. Both writes commit together: a recycler must never
+    // end up "confirmed" against a lot record that still reads as unclaimed.
+    const updated = await prisma.$transaction(async (tx) => {
+      const acceptance = await tx.acceptance.update({
+        where: { id },
+        data: { recyclerResponse: response, responseTs: new Date() },
+      });
+      if (canonical === "ACCEPT") {
+        await tx.lot.update({
+          where: { id: existing.lotId },
+          data: { status: "ACCEPTED" },
+        });
+      }
+      return acceptance;
     });
 
     // Collector notification. Optional by construction: no contact row, no
@@ -339,6 +356,161 @@ recyclerRouter.get("/history", async (req, res, next) => {
       totalPages: Math.ceil(total / limit),
       total,
     });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /recycler/flags/check — re-score one of this recycler's own handovers
+// against the price model, using the reference/buyer/final prices already
+// snapshotted onto it at handover time (see scoreHandover in routes/handover.js).
+//
+// Scoreable means: both prices are present and every unit involved is KG.
+// Deliberately NOT gated on referencePriceStatus === "RESOLVED" — under
+// normal operation the reference is the recycler-median (MARKET_MEDIAN), and
+// requiring RESOLVED would 422 almost every handover, since only one of the
+// twelve app categories currently has an external Metal Mandi match.
+// ---------------------------------------------------------------------------
+recyclerRouter.post("/flags/check", async (req, res, next) => {
+  try {
+    const { handover_id } = req.body ?? {};
+    if (!handover_id) {
+      return res.status(400).json({ error: "handover_id_required" });
+    }
+
+    const handover = await prisma.handover.findFirst({
+      where: { id: handover_id, recyclerId: req.recycler.id },
+      select: {
+        id: true,
+        referencePriceSnapshot: true,
+        referencePriceUnit: true,
+        referencePriceStatus: true,
+        buyerOfferSnapshot: true,
+        buyerOfferUnit: true,
+        finalUnitPrice: true,
+        inspectedCondition: true,
+        lot: { select: { unit: true, collectorId: true } },
+      },
+    });
+
+    if (!handover) {
+      return res.status(404).json({ error: "handover_not_found" });
+    }
+
+    const prices = {
+      reference_price: handover.referencePriceSnapshot === null
+        ? null
+        : Number(handover.referencePriceSnapshot),
+      buyer_offer_per_kg: handover.buyerOfferSnapshot === null
+        ? null
+        : Number(handover.buyerOfferSnapshot),
+      final_price_per_kg: Number(handover.finalUnitPrice),
+      condition: handover.inspectedCondition,
+    };
+
+    const unitsAreKg =
+      handover.referencePriceUnit === "KG" &&
+      handover.buyerOfferUnit === "KG" &&
+      handover.lot.unit === "KG";
+
+    if (!unitsAreKg || prices.reference_price === null || prices.buyer_offer_per_kg === null) {
+      return res.status(422).json({
+        error: "handover_not_scoreable",
+        reason: "reference and buyer prices must both be present, and every unit must be KG",
+        handover_id,
+        prices,
+        reference_price_status: handover.referencePriceStatus,
+        reference_price_unit: handover.referencePriceUnit,
+        buyer_offer_unit: handover.buyerOfferUnit,
+        lot_unit: handover.lot.unit,
+      });
+    }
+
+    const result = await callPredict(prices);
+    if (!result.ok) {
+      return res.status(502).json({
+        error: "model_unavailable",
+        reason: result.reason,
+        handover_id,
+        prices,
+      });
+    }
+
+    // A handover whose original POST /handover scoring hit a model outage
+    // never got mlScoredAt set, so it was invisible to both parties' flag
+    // rates (entityAnomaly.js) until now. Set it here too, on any successful
+    // verdict, not only the first one.
+    await prisma.handover.update({
+      where: { id: handover.id },
+      data: { mlScoredAt: new Date() },
+    }).catch((err) => log.recycler.warn("ml-scored-at write failed", { reason: err?.message }));
+
+    let flag = null;
+    if (result.body.anomaly) {
+      const severity = result.body.risk_level === "CRITICAL" ? "CRITICAL" : "WARN";
+      // Re-checking an already-flagged handover must not pile up duplicate
+      // flags — return the existing one instead of creating a second.
+      flag = await prisma.anomalyFlag.findFirst({
+        where: {
+          subjectType: "HANDOVER",
+          subjectId: handover.id,
+          detectorCode: "ML_PRICE_ANOMALY",
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      if (!flag) {
+        flag = await prisma.anomalyFlag.create({
+          data: {
+            subjectType: "HANDOVER",
+            subjectId: handover.id,
+            detectorCode: "ML_PRICE_ANOMALY",
+            severity,
+            detail: {
+              collector_id: handover.lot.collectorId,
+              recycler_id: req.recycler.id,
+              reference_price_status: handover.referencePriceStatus,
+              ...prices,
+              score: result.body.score,
+              threshold: result.body.threshold,
+              risk_level: result.body.risk_level,
+              features: result.body.features,
+            },
+          },
+        });
+      }
+    }
+
+    // Same reasoning as scoreHandover: whether this re-check was anomalous or
+    // not, both parties' flag rates need recomputing against the update above.
+    await Promise.all([
+      refreshEntityFlagRate("RECYCLER", req.recycler.id),
+      refreshEntityFlagRate("COLLECTOR", handover.lot.collectorId),
+    ]);
+
+    return res.json({
+      handover_id: handover.id,
+      prices,
+      model: result.body,
+      flag,
+    });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /recycler/anomaly/recheck — recompute this recycler's own flag rate on
+// demand. The console's "Run detection" button uses this for the demo path
+// ("force a run on stage, show what came back"); the automatic path is
+// scoreHandover firing after every POST /handover, so this is a manual nudge,
+// not a substitute for it.
+// ---------------------------------------------------------------------------
+recyclerRouter.post("/anomaly/recheck", async (req, res, next) => {
+  try {
+    const result = await refreshEntityFlagRate("RECYCLER", req.recycler.id);
+    return res.json(result);
   } catch (err) {
     return next(err);
   }

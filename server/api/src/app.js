@@ -7,7 +7,6 @@ import { recyclerRouter } from "./routes/recycler.js";
 import { lotsRouter } from "./routes/lots.js";
 import { handoverRouter } from "./routes/handover.js";
 import { photosRouter } from "./routes/photos.js";
-import { detectRouter } from "./routes/detect.js";
 import { publicRouter } from "./routes/public.js";
 import { log } from "./lib/logger.js";
 
@@ -93,7 +92,10 @@ export function createApp() {
   app.use("/lots", lotsRouter);       // task 15
   app.use("/handover", handoverRouter); // tasks 16-17
   app.use("/photos", photosRouter);   // task 18
-  app.use("/detect-run", detectRouter); // task 20
+  // The rule-based detector run (D1-D13) that used to live at /detect-run was
+  // dropped: anomaly detection is scoreHandover's deployed-model verdict,
+  // aggregated per party in entityAnomaly.js. The console's manual re-check
+  // now lives at POST /recycler/anomaly/recheck instead.
   app.use("/public", publicRouter);     // collector app — no auth
 
   app.use((_req, res) => res.status(404).json({ error: "not_found" }));
