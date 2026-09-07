@@ -8,6 +8,10 @@ beforeEach(() => {
   process.env.SMS_ENABLED = "true";
   process.env.SMS_DRY_RUN = "false";
   delete process.env.SMS_ALLOWLIST;
+  // Both routing vars must be cleared, not just the allowlist: the repo's .env
+  // sets SMS_REDIRECT_TO for demo builds, and an ambient value would silently
+  // rewrite the destination every assertion below depends on.
+  delete process.env.SMS_REDIRECT_TO;
   vi.restoreAllMocks();
 });
 
@@ -108,5 +112,45 @@ describe("sendSms", () => {
     const res = await sendSms({ numbers: "9999999999", message: "hi" });
 
     expect(res.reason).not.toContain("test-key");
+  });
+
+  it("redirects every recipient to SMS_REDIRECT_TO when it is set", async () => {
+    // Demo builds cannot text the seeded MPCB numbers, so the whole
+    // collector->recycler direction is unreachable without this redirect.
+    process.env.SMS_REDIRECT_TO = "9653158855";
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true, status: 200, json: async () => ({ return: true }),
+    });
+
+    const res = await sendSms({ numbers: "9833542199,9822334455", message: "hi" });
+
+    const [url] = fetchSpy.mock.calls[0];
+    expect(String(url)).toContain("numbers=9653158855");
+    expect(String(url)).not.toContain("9833542199");
+    expect(res.to).toEqual(["9653158855"]);
+  });
+
+  it("cannot use SMS_REDIRECT_TO to reach a number the allowlist rejects", async () => {
+    // The redirect is routing, not a fourth safety guard. It runs before the
+    // allowlist precisely so the allowlist keeps the last word.
+    process.env.SMS_REDIRECT_TO = "9999999999";
+    process.env.SMS_ALLOWLIST = "9653158855";
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+    const res = await sendSms({ numbers: "9833542199", message: "hi" });
+
+    expect(res.ok).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not invent a recipient when there are no numbers to redirect", async () => {
+    process.env.SMS_REDIRECT_TO = "9653158855";
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+    const res = await sendSms({ numbers: "", message: "hi" });
+
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe("no numbers");
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

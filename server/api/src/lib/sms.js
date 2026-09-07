@@ -16,6 +16,10 @@ import { logger } from "./logger.js";
  *   2. SMS_ALLOWLIST, when set, is the ONLY set of numbers that can receive
  *   3. SMS_DRY_RUN logs what would be sent and touches no network
  *
+ * SMS_REDIRECT_TO is routing, NOT a fourth guard: it rewrites the destination
+ * to one test handset for demo builds. It is applied before the allowlist, so
+ * it can never be used to reach a number the allowlist would have rejected.
+ *
  * Note: the pre-built `log` export in ./logger.js has no `sms` namespace
  * (only req/auth/recycler/handover/sync/detect/aiml/db exist there, and this
  * module's ownership boundary doesn't extend to adding one). The logger
@@ -48,8 +52,21 @@ export async function sendSms({ numbers, message }) {
   if (!key) return { ok: false, reason: "FAST2SMS_API_KEY is not configured" };
 
   const requested = String(numbers ?? "").split(",").map((n) => n.trim()).filter(Boolean);
+
+  // Demo routing, applied BEFORE the allowlist so the allowlist stays the last
+  // word. The seeded recycler numbers are real businesses on the MPCB register,
+  // so SMS_ALLOWLIST correctly filters every one of them out — which also makes
+  // the collector->recycler direction silently unreachable on a demo build.
+  // SMS_REDIRECT_TO rewrites the destination to a single test handset instead of
+  // editing the seeded rows. Unset it and normal per-recycler routing returns.
+  const redirect = process.env.SMS_REDIRECT_TO?.trim();
+  const addressed = redirect && requested.length > 0 ? [redirect] : requested;
+  if (redirect && requested.length > 0) {
+    log.info("redirected", { intended: requested.join(","), to: redirect });
+  }
+
   const allow = allowlist();
-  const permitted = allow ? requested.filter((n) => allow.has(n)) : requested;
+  const permitted = allow ? addressed.filter((n) => allow.has(n)) : addressed;
 
   if (permitted.length === 0) {
     return { ok: false, reason: allow ? "every number filtered by SMS_ALLOWLIST" : "no numbers" };
