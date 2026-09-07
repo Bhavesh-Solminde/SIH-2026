@@ -7,14 +7,22 @@
     "newArchEnabled": true,
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "platforms": ["android"],
-    "assetBundlePatterns": ["assets/**/*"],
+    "platforms": [
+      "android"
+    ],
+    "assetBundlePatterns": [
+      "assets/**/*"
+    ],
     "android": {
       "package": "in.bhaav.collector",
       "minSdkVersion": 31,
       "compileSdkVersion": 35,
       "targetSdkVersion": 35,
-      "permissions": ["CAMERA", "ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"],
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ],
       "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -22,6 +30,12 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       }
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "8e41f448-292e-494e-9b38-620748ef4256"
+      }
+    },
+    "owner": "bhaveshsolminde"
   }
 }
