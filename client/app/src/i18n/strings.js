@@ -12,9 +12,14 @@
  * `{name}` and are filled from the same params object.
  *
  * Keys prefixed `nav_` are navigator titles; `voice_` are phrases spoken
- * through `useVoice().speak()` rather than rendered. Both must be catalogued:
- * the TTS locale follows the active language, so a hardcoded Marathi phrase
- * gets read aloud by a Hindi voice.
+ * rather than rendered. Both must be catalogued.
+ *
+ * Every key the app SPEAKS also needs a recording in `src/audio/phrases.js`,
+ * not just an entry here. Speech goes through `useVoice().speakKey()`, which
+ * plays the bundled clip and only falls back to device TTS — silent on any
+ * handset with no mr-IN/hi-IN voice installed — when there is no recording.
+ * `test/audio/spoken-keys.test.js` enforces that pairing and names the key it
+ * is missing. Adding a string you only RENDER is unaffected.
  */
 
 /** Supported language tags, in switcher order. */
@@ -33,8 +38,6 @@ const catalogue = {
   // displayed label changed.
   nav_requests:        { mr: 'माझे लॉट्स',       hi: 'मेरे लॉट्स',           en: 'My Lots' },
   nav_requests_header: { mr: 'माझे लॉट्स',       hi: 'मेरे लॉट्स',           en: 'My Lots' },
-  nav_lots:            { mr: 'नोंदी',            hi: 'प्रविष्टियाँ',         en: 'Lots' },
-  nav_lots_header:     { mr: 'माझ्या नोंदी',      hi: 'मेरी प्रविष्टियाँ',    en: 'My Lots' },
   nav_ledger:          { mr: 'कमाई',            hi: 'कमाई',               en: 'Earnings' },
   nav_ledger_header:   { mr: 'कमाई',            hi: 'कमाई',               en: 'Earnings' },
   nav_rates:           { mr: 'दर',              hi: 'दर',                 en: 'Rates' },
@@ -56,7 +59,6 @@ const catalogue = {
   home_title:        { mr: 'भाव संग्राहक',   hi: 'भाव संग्राहक',   en: 'Bhaav Collector' },
   home_subtitle:     { mr: 'ई-कचरा नोंद करा', hi: 'ई-कचरा दर्ज करें', en: 'Record E-Waste' },
   home_new_lot:      { mr: 'नवीन नोंद',      hi: 'नई प्रविष्टि',    en: 'New Entry' },
-  home_history:      { mr: 'इतिहास',        hi: 'इतिहास',        en: 'History' },
   home_earnings:     { mr: 'कमाई',          hi: 'कमाई',          en: 'Earnings' },
   home_price_board:  { mr: 'दर पत्रक',       hi: 'दर पट्टिका',     en: 'Price Board' },
   home_view_rates:   { mr: 'भाव पाहा',      hi: 'भाव देखें',      en: 'View rates' },
@@ -221,7 +223,6 @@ const catalogue = {
   evidence_uploading:         { mr: 'फोटो पाठवत आहे…', hi: 'फ़ोटो भेजी जा रही है…', en: 'Uploading photo…' },
   evidence_upload_failed:     { mr: 'फोटो पाठवता आली नाही, पुन्हा प्रयत्न करा', hi: 'फ़ोटो नहीं भेजी जा सकी, दोबारा प्रयास करें', en: 'Could not upload photo, try again' },
   evidence_confirm_and_agree: { mr: 'पुष्टी करा आणि सहमत व्हा', hi: 'पुष्टि करें और सहमत हों', en: 'Confirm & Agree' },
-  evidence_cancel:            { mr: 'रद्द करा', hi: 'रद्द करें', en: 'Cancel' },
 
   // ---------------------------------------------------------------------
   // Safety cards
@@ -270,11 +271,8 @@ const catalogue = {
   // Lots (history list)
   // ---------------------------------------------------------------------
   lot_status_awaiting_confirm: { mr: 'पुष्टीची प्रतीक्षा', hi: 'पुष्टि की प्रतीक्षा', en: 'Awaiting confirmation' },
-  lot_status_complete:         { mr: 'पूर्ण', hi: 'पूर्ण', en: 'Complete' },
   filter_all:                  { mr: 'सर्व', hi: 'सभी', en: 'All' },
   filter_confirmation_short:   { mr: 'पुष्टी', hi: 'पुष्टि', en: 'Confirmation' },
-  lots_view_qr_a11y:           { mr: 'QR कोड पहा', hi: 'QR कोड देखें', en: 'View QR code' },
-  lots_tap_for_qr:             { mr: 'QR कोड पाहण्यासाठी टच करा', hi: 'QR कोड देखने के लिए टच करें', en: 'Tap to view QR code' },
   lots_empty_all:              { mr: 'अद्याप कोणतीही नोंद नाही', hi: 'अभी तक कोई प्रविष्टि नहीं', en: 'No entries yet' },
   lots_empty_filtered:         { mr: 'या स्थितीत काहीही नाही', hi: 'इस स्थिति में कुछ भी नहीं', en: 'Nothing in this status' },
 

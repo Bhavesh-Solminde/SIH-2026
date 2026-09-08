@@ -3,11 +3,14 @@
  * mr/hi generated with macOS Lekha (hi_IN) TTS voice; en with Rishi (en_IN).
  * Located in assets/audio/{lang}/*.m4a — see scripts/generate-clips.sh.
  *
- * All three packs carry the exact same 34 clip names (checked by
+ * All three packs carry the exact same 55 clip names — the 34 words below
+ * plus the 21 phrases merged in from phrases.js (checked by
  * test/audio/clips.test.js) so CLIPS[lang] never silently falls back to
  * CLIPS.mr in practice — that fallback in src/audio/index.js stays as a
  * crash guard, not a real substitute for a missing language's audio.
  */
+
+import { PHRASE_CLIPS } from './phrases.js';
 
 const mr = {
   // Category names
@@ -126,4 +129,14 @@ const en = {
   thousand: require('../../assets/audio/en/thousand.m4a'),
 };
 
-export const CLIPS = { mr, hi, en };
+// Words and phrases live in one lookup so playClips() can sequence a number
+// and a phrase in a single utterance — e.g. speakKey('requests_pending',
+// { count: 3 }) plays ['three', 'requests_pending_other']. They are authored
+// in separate modules because they are separate vocabularies: these 34 names
+// are indexed by position by composeNumber()/composeDigits(), the 21 in
+// phrases.js are indexed by i18n key.
+export const CLIPS = {
+  mr: { ...mr, ...PHRASE_CLIPS.mr },
+  hi: { ...hi, ...PHRASE_CLIPS.hi },
+  en: { ...en, ...PHRASE_CLIPS.en },
+};

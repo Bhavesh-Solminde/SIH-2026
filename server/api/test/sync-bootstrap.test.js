@@ -95,4 +95,34 @@ describe("GET /sync/bootstrap", () => {
     expect(cat).toHaveProperty("nameEn");
     expect(cat).toHaveProperty("defaultUnit");
   });
+
+  // trustBadgeRevoked is independent of authorizationStatus (only
+  // mpcb-refresh.js sets that one) — an admin can revoke a recycler's trust
+  // badge after an anomaly without their MPCB listing having lapsed. Both
+  // must hide the recycler from the device the same way.
+  it("excludes a VALID recycler whose trust badge an admin has revoked", async () => {
+    const cat = await makeCategory();
+    const valid = await makeRecycler({ name: "Bharat E Waste" });
+    const revoked = await makeRecycler({
+      name: "Suspect Recyclers Pvt Ltd",
+      authorizationStatus: "VALID",
+      trustBadgeRevoked: true,
+    });
+    await publish(valid.id, cat.id, "420.00", "2026-09-01T09:00:00+05:30");
+    await publish(revoked.id, cat.id, "999.00", "2026-09-01T09:00:00+05:30");
+
+    const res = await request(app).get("/sync/bootstrap");
+    expect(res.status).toBe(200);
+    expect(res.body.recyclers.map((r) => r.name)).toEqual(["Bharat E Waste"]);
+  });
+
+  it("omits rates belonging to a VALID-but-revoked recycler", async () => {
+    const cat = await makeCategory();
+    const revoked = await makeRecycler({ authorizationStatus: "VALID", trustBadgeRevoked: true });
+    await publish(revoked.id, cat.id, "999.00", "2026-09-01T09:00:00+05:30");
+
+    const res = await request(app).get("/sync/bootstrap");
+    expect(res.status).toBe(200);
+    expect(res.body.rates).toHaveLength(0);
+  });
 });

@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import request from "supertest";
 import { createApp } from "../src/app.js";
 import { prisma, truncateAll, makeCategory, makeRecycler } from "./helpers/db.js";
+import { hashPassword } from "../src/lib/password.js";
+import { uuidv7 } from "@bhaav/core/ids";
 
 const app = createApp();
 
@@ -73,6 +75,36 @@ describe("GET /sync/delta", () => {
     const res = await request(app).get(`/sync/delta?since=${cursor}`);
     expect(res.status).toBe(200);
 
+    expect(res.body.removedRecyclerIds).toContain(recycler.id);
+    const ids = res.body.recyclers.map((r) => r.id);
+    expect(ids).not.toContain(recycler.id);
+  });
+
+  // Same mechanism as a lapse, but driven by the real admin endpoint rather
+  // than raw SQL — exercises PATCH /recyclers/:id/badge's own updatedAt bump
+  // (recyclerBadge.js), which exists specifically so this path doesn't go
+  // silently unnoticed by delta sync the way a plain trustBadgeRevoked write
+  // would (Recycler.updatedAt has no @updatedAt decorator in schema.prisma).
+  it("puts a trust-badge-revoked recycler in removedRecyclerIds too", async () => {
+    const recycler = await makeRecycler({ name: "Revoked Co", authorizationStatus: "VALID" });
+    const adminAccount = await prisma.recyclerAccount.create({
+      data: {
+        recyclerId: null,
+        email: `admin-${uuidv7().slice(0, 6)}@example.com`,
+        passwordHash: await hashPassword("password"),
+        role: "ADMIN",
+      },
+    });
+    const admin = request.agent(app);
+    await admin.post("/auth/login").send({ email: adminAccount.email, password: "password" });
+
+    const cursor = new Date().toISOString();
+
+    const patchRes = await admin.patch(`/recyclers/${recycler.id}/badge`).send({ revoked: true });
+    expect(patchRes.status).toBe(200);
+
+    const res = await request(app).get(`/sync/delta?since=${cursor}`);
+    expect(res.status).toBe(200);
     expect(res.body.removedRecyclerIds).toContain(recycler.id);
     const ids = res.body.recyclers.map((r) => r.id);
     expect(ids).not.toContain(recycler.id);

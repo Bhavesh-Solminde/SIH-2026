@@ -61,9 +61,14 @@ recyclerBadgeRouter.patch("/:id/badge", async (req, res, next) => {
       return res.status(404).json({ error: "not_found" });
     }
 
+    // updatedAt is set explicitly here — the Recycler model has no @updatedAt
+    // decorator (schema.prisma), so Prisma never bumps it on its own. GET
+    // /sync/delta's "what changed since cursor" mechanism keys entirely off
+    // this column; without setting it, a revoke would be invisible to that
+    // path even though it filters on trustBadgeRevoked correctly.
     const updated = await prisma.recycler.update({
       where: { id },
-      data: { trustBadgeRevoked: revoked },
+      data: { trustBadgeRevoked: revoked, updatedAt: new Date() },
     });
 
     log.admin.info(revoked ? "admin revoked trust badge" : "admin restored trust badge", {

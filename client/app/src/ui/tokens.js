@@ -136,6 +136,12 @@ export const statusColors = {
   AWAITING_CONFIRM: { bg: '#E3F2FD',              text: '#1565C0' },
   CONFIRMED:        { bg: colors.primarySurface,  text: colors.primary },
   DISPUTED:         { bg: colors.dangerSurface,   text: colors.danger },
+  // A lot AcceptScreen couldn't reach the server for — queued in AsyncStorage
+  // (lib/lotOutbox.js), not yet a real row anywhere server-side. Same
+  // "amber, not-done-yet" language as PENDING, distinct label so it never
+  // reads as "the recycler hasn't inspected it yet" (a state that requires
+  // the lot to already exist on the server, which this one doesn't).
+  QUEUED_LOCALLY:   { bg: colors.warningSurface, text: colors.warning },
 };
 
 export const conditionColors = {

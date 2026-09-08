@@ -12,9 +12,14 @@
 # varies by Android handset, so the app ships its own guaranteed audio.
 #
 # Usage:
-#   scripts/generate-clips.sh <lang>
+#   scripts/generate-clips.sh <lang> [phrases]
 #
 #   <lang> is one of: mr | hi | en
+#
+#   Passing the literal second argument `phrases` generates ONLY the phrase
+#   pack (screen headings and spoken status lines, one clip per i18n key) and
+#   leaves the 34 word clips untouched. Without it the original word pack is
+#   generated, which OVERWRITES the existing reviewed recordings.
 #
 # Only run this for a language whose pack doesn't exist yet, or one you
 # deliberately intend to regenerate — re-running it for mr/hi overwrites the
@@ -34,8 +39,13 @@
 set -euo pipefail
 
 LANG_CODE="${1:-}"
+MODE="${2:-words}"
 if [[ -z "$LANG_CODE" ]]; then
-  echo "Usage: $0 <mr|hi|en>" >&2
+  echo "Usage: $0 <mr|hi|en> [phrases]" >&2
+  exit 1
+fi
+if [[ "$MODE" != "words" && "$MODE" != "phrases" ]]; then
+  echo "Unknown mode '$MODE' — expected 'phrases' or nothing" >&2
   exit 1
 fi
 
@@ -127,11 +137,104 @@ declare -a MR_PHRASES=(
   "hundred:शंभर" "thousand:हजार"
 )
 
-case "$LANG_CODE" in
-  en) PHRASES=("${EN_PHRASES[@]}") ;;
-  hi) PHRASES=("${HI_PHRASES[@]}") ;;
-  mr) PHRASES=("${MR_PHRASES[@]}") ;;
-esac
+# ---------------------------------------------------------------------------
+# Phrase pack — one clip per i18n key spoken through useVoice().speakKey().
+#
+# These exist because expo-speech is silent on any handset with no mr-IN/hi-IN
+# voice installed, which is most of them: the OS-default (English) voice given
+# Devanagari text produces nothing. Screen headings therefore ship as bundled
+# audio, exactly like the digits do. The clip NAME is the i18n key from
+# src/i18n/strings.js; the spoken phrase is that key's translation.
+#
+# requests_pending_{one,other} deliberately omit the {count} placeholder —
+# useVoice().speakKey() prepends the number as digit clips, and in all three
+# languages the count is spoken first.
+# ---------------------------------------------------------------------------
+declare -a EN_SENTENCES=(
+  "accept_label:Accept"
+  "camera_prompt:Take Photo"
+  "category_label:Category"
+  "condition_label:Condition"
+  "earnings_title:Total Earnings"
+  "handover_confirmed:Confirmed"
+  "handover_label:Handover"
+  "home_title:Bhaav Collector"
+  "price_board_title:Price Board"
+  "quantity_label:Quantity"
+  "report_problem_success:Report submitted"
+  "requests_pending_one:request pending"
+  "requests_pending_other:requests pending"
+  "safety_title:Safety Guidelines"
+  "source_label:Source"
+  "subcategory_label:Sub-category"
+  "value_label:Estimated Value"
+  "voice_accepted:Accepted"
+  "voice_dispute_recorded:Your objection has been recorded"
+  "voice_error_generic:Something went wrong, please try again"
+  "voice_handover_confirmed:Handover confirmed"
+)
+
+declare -a HI_SENTENCES=(
+  "accept_label:स्वीकार करें"
+  "camera_prompt:फ़ोटो लें"
+  "category_label:प्रकार"
+  "condition_label:स्थिति"
+  "earnings_title:कुल कमाई"
+  "handover_confirmed:पुष्टि हो गई"
+  "handover_label:हस्तांतरण"
+  "home_title:भाव संग्राहक"
+  "price_board_title:दर पट्टिका"
+  "quantity_label:मात्रा"
+  "report_problem_success:शिकायत दर्ज की गई"
+  "requests_pending_one:अनुरोध लंबित"
+  "requests_pending_other:अनुरोध लंबित"
+  "safety_title:सुरक्षा निर्देश"
+  "source_label:स्रोत"
+  "subcategory_label:उपप्रकार"
+  "value_label:अनुमानित मूल्य"
+  "voice_accepted:स्वीकार किया गया"
+  "voice_dispute_recorded:आपकी आपत्ति दर्ज कर ली गई"
+  "voice_error_generic:त्रुटि हुई, दोबारा प्रयास करें"
+  "voice_handover_confirmed:हस्तांतरण की पुष्टि हो गई"
+)
+
+declare -a MR_SENTENCES=(
+  "accept_label:स्वीकार करा"
+  "camera_prompt:फोटो घ्या"
+  "category_label:प्रकार"
+  "condition_label:स्थिती"
+  "earnings_title:एकूण कमाई"
+  "handover_confirmed:पुष्टी झाली"
+  "handover_label:हस्तांतरण"
+  "home_title:भाव संग्राहक"
+  "price_board_title:दर पत्रक"
+  "quantity_label:प्रमाण"
+  "report_problem_success:तक्रार नोंदवली"
+  "requests_pending_one:विनंती प्रलंबित"
+  "requests_pending_other:विनंत्या प्रलंबित"
+  "safety_title:सुरक्षा सूचना"
+  "source_label:स्रोत"
+  "subcategory_label:उपप्रकार"
+  "value_label:अंदाजे मूल्य"
+  "voice_accepted:स्वीकारले"
+  "voice_dispute_recorded:तुमचा आक्षेप नोंदवला"
+  "voice_error_generic:चूक झाली, पुन्हा प्रयत्न करा"
+  "voice_handover_confirmed:हस्तांतरण पुष्टी झाली"
+)
+
+if [[ "$MODE" == "phrases" ]]; then
+  case "$LANG_CODE" in
+    en) PHRASES=("${EN_SENTENCES[@]}") ;;
+    hi) PHRASES=("${HI_SENTENCES[@]}") ;;
+    mr) PHRASES=("${MR_SENTENCES[@]}") ;;
+  esac
+else
+  case "$LANG_CODE" in
+    en) PHRASES=("${EN_PHRASES[@]}") ;;
+    hi) PHRASES=("${HI_PHRASES[@]}") ;;
+    mr) PHRASES=("${MR_PHRASES[@]}") ;;
+  esac
+fi
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT

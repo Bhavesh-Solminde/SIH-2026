@@ -1,12 +1,18 @@
 import { useCallback } from 'react';
 import { useLanguage } from '../i18n/LanguageContext';
+import { useStrings } from '../i18n/useStrings';
 import { playClips, stopClips, composeDigits } from '../audio';
+import { voiceRouteFor } from '../audio/phrases';
 import { log } from '../lib/logger';
 
 let Speech = null;
 try { Speech = require('expo-speech'); } catch {}
 
 const LANG_CODE = { mr: 'mr-IN', hi: 'hi-IN', en: 'en-IN' };
+// Written as escapes, not literal characters (U+0900–U+097F). This is a script
+// detector, not display text, but test/i18n/no-hardcoded-strings.test.js scans
+// source for literal Devanagari and would flag the character class itself.
+const DEVANAGARI = /[\u0900-\u097F]/;
 
 // expo-speech uses the OS text-to-speech engine, and mr-IN/hi-IN voice
 // packs are far from guaranteed on a given Android handset — the phone may
@@ -19,9 +25,18 @@ const LANG_CODE = { mr: 'mr-IN', hi: 'hi-IN', en: 'en-IN' };
 //
 // getAvailableVoicesAsync() lets us check before speaking rather than guess:
 // if no installed voice matches the requested language, drop the `language`
-// constraint entirely so the OS uses whatever voice it does have — the
-// wrong-language accent reading the text is still audible feedback, which
-// is what the product brief cares about; true silence is the actual failure.
+// constraint entirely so the OS uses whatever voice it does have.
+//
+// That fallback was originally justified as "a wrong-language accent is still
+// audible feedback; true silence is the real failure". It does not hold for
+// Devanagari — an English voice given `प्रकार` says nothing at all — and that
+// is precisely why spoken screen headings shipped working in English only.
+// Phrases the app actually speaks no longer come through here: they are
+// bundled recordings resolved by src/audio/phrases.js and played by
+// useVoice().speakKey(). This path is now the fallback for keys with no
+// recording, and speak() logs a warning when it is handed script the chosen
+// voice cannot render, so the next silent string is visible in the log
+// instead of invisible on the device.
 let voicesPromise = null;
 function getVoices() {
   if (!Speech?.getAvailableVoicesAsync) return Promise.resolve([]);
@@ -42,7 +57,7 @@ async function resolveSpeechLanguage(lang) {
   const prefix = wanted.split('-')[0].toLowerCase();
   const voices = await getVoices();
   const hasMatch = voices.some((v) => v.language?.toLowerCase().startsWith(prefix));
-  if (hasMatch) return wanted;
+  if (hasMatch) return { language: wanted, matched: true };
 
   if (!warnedMissingLang.has(wanted)) {
     warnedMissingLang.add(wanted);
@@ -51,13 +66,16 @@ async function resolveSpeechLanguage(lang) {
       installed: voices.map((v) => v.language),
     });
   }
-  return undefined; // no `language` option → OS default voice, so something is heard
+  // No `language` option → OS default voice. See the caller: that only
+  // produces sound for Latin script.
+  return { language: undefined, matched: false };
 }
 
 /**
  * useVoice — unified voice output hook.
  *
  * speak(text)           TTS a plain string (screen name, label, status)
+ * speakKey(key, params) Speak an i18n key — bundled clip if recorded, else TTS
  * speakClips(names)     Play pre-recorded audio clips in sequence
  * speakNumber(n)        Speak a number as digits: 43910 → "four three nine one zero"
  * stop()                Stop any ongoing TTS *and* clip playback
@@ -72,12 +90,25 @@ async function resolveSpeechLanguage(lang) {
  */
 export function useVoice() {
   const { lang } = useLanguage();
+  const t = useStrings();
 
   const speak = useCallback(async (text) => {
     stopClips();
     if (!Speech?.speak) return;
     try {
-      const language = await resolveSpeechLanguage(lang);
+      const { language, matched } = await resolveSpeechLanguage(lang);
+      // The device-default-voice fallback in resolveSpeechLanguage assumes a
+      // wrong accent beats silence. That holds for Latin script only: an
+      // English voice handed Devanagari produces nothing at all. This is the
+      // exact failure that made spoken headings English-only, so say so in the
+      // log rather than letting it look like the utterance succeeded. The fix
+      // for a phrase that reaches this line is to record it — see speakKey().
+      if (!matched && DEVANAGARI.test(String(text))) {
+        log.voice.warn(
+          'speaking Devanagari with a non-matching voice — likely inaudible; add a phrase clip for this string',
+          { lang },
+        );
+      }
       Speech.stop();
       Speech.speak(String(text), {
         ...(language ? { language } : {}),
@@ -100,10 +131,36 @@ export function useVoice() {
     await playClips(composeDigits(n, lang), lang).catch(() => {});
   }, [lang]);
 
+  /**
+   * Speak an i18n key. Plays the bundled recording when one exists, and only
+   * falls back to device TTS when it does not.
+   *
+   * This is the entry point every screen should use to announce itself.
+   * Handing a resolved translation to speak() — what the screens did before —
+   * always took the TTS path, which is silent on any handset with no mr-IN or
+   * hi-IN voice installed. test/audio/spoken-keys.test.js fails the build if
+   * that form reappears in any file under src/ except this one, which is
+   * where the fallback is legitimately implemented.
+   *
+   * Identity is stable across renders: `lang` is the only changing input, and
+   * `t`, `speak` and `speakClips` are each memoised on `lang` too. Screens put
+   * this in the dependency array of the useCallback they hand to
+   * useFocusEffect, and an unstable value there re-announces the screen name
+   * on every keypress — see the doc comment in i18n/useStrings.js.
+   */
+  const speakKey = useCallback(async (key, params) => {
+    const route = voiceRouteFor(key, params, lang);
+    if (route.kind === 'clips') {
+      await speakClips(route.names);
+      return;
+    }
+    await speak(t(key, params));
+  }, [lang, t, speak, speakClips]);
+
   const stop = useCallback(() => {
     stopClips();
     if (Speech?.stop) try { Speech.stop(); } catch {}
   }, []);
 
-  return { speak, speakClips, speakNumber, stop };
+  return { speak, speakKey, speakClips, speakNumber, stop };
 }

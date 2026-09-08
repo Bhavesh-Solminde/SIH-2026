@@ -13,6 +13,7 @@ import { createLot } from '../db/repos/lots';
 import { createAcceptance } from '../db/repos/acceptances';
 import { uuidv7, referenceCodeFromUuid } from '@bhaav/core/ids';
 import { getDeviceId } from '../lib/deviceId';
+import { queueLot } from '../lib/lotOutbox';
 import { log } from '../lib/logger';
 import { webDirectionsUrl, nativeDirectionsUrl, shareMessage, hasLocation } from '../lib/directions';
 
@@ -21,7 +22,7 @@ import { webDirectionsUrl, nativeDirectionsUrl, shareMessage, hasLocation } from
  */
 export default function AcceptScreen({ navigation, route, db, apiUrl }) {
   const t = useStrings();
-  const { speak } = useVoice();
+  const { speakKey } = useVoice();
 
   // Declared before the callbacks that list `recycler` in their dependency
   // arrays. It used to sit below them, which reads `recycler` inside the
@@ -37,8 +38,8 @@ export default function AcceptScreen({ navigation, route, db, apiUrl }) {
 
   useFocusEffect(
     useCallback(() => {
-      speak(t('accept_label'));
-    }, [speak, t])
+      speakKey('accept_label');
+    }, [speakKey])
   );
 
   // Prefer the native maps app; fall back to the Google Maps web link, which
@@ -72,8 +73,8 @@ export default function AcceptScreen({ navigation, route, db, apiUrl }) {
   // the GOOD *condition grade* — "चांगली". So confirming an acceptance
   // announced a quality rating nobody had asked about. Say what happened.
   const announceAccepted = useCallback(() => {
-    speak(t('voice_accepted'));
-  }, [speak, t]);
+    speakKey('voice_accepted');
+  }, [speakKey]);
 
   const [done, setDone] = useState(false);
   const [pending, setPending] = useState(false);
@@ -106,26 +107,34 @@ export default function AcceptScreen({ navigation, route, db, apiUrl }) {
       // ── No local DB — try submitting directly to the API ────────────────
       if (!db) {
         const deviceId = await getDeviceId();
+        // Generated here, sent in the body, and shown on the QR below —
+        // POST /public/lots now creates the lot under THIS id (client-
+        // supplied) rather than minting its own, specifically so that if
+        // this request fails and the draft goes into the outbox instead,
+        // the QR the collector is about to show the recycler stays valid
+        // once the queued retry actually reaches the server.
         const lotId = uuidv7();
+        const body = {
+          lotId,
+          collectorId: deviceId,
+          categoryCode: category,
+          unit,
+          quantity: Number(quantity),
+          condition,
+          sourceType: sourceType ?? null,
+          recyclerId: recycler.id,
+          acceptedRate: Number(recycler.rate),
+          deviceId,
+          estimatedValue: Math.round(recycler.estimatedValue ?? 0),
+          collectionTs: collectionTs ?? new Date().toISOString(),
+          collectionLat: collectionLat ?? null,
+          collectionLng: collectionLng ?? null,
+        };
         try {
           const resp = await fetch(`${apiUrl}/public/lots`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              collectorId: deviceId,
-              categoryCode: category,
-              unit,
-              quantity: Number(quantity),
-              condition,
-              sourceType: sourceType ?? null,
-              recyclerId: recycler.id,
-              acceptedRate: Number(recycler.rate),
-              deviceId,
-              estimatedValue: Math.round(recycler.estimatedValue ?? 0),
-              collectionTs: collectionTs ?? new Date().toISOString(),
-              collectionLat: collectionLat ?? null,
-              collectionLng: collectionLng ?? null,
-            }),
+            body: JSON.stringify(body),
           });
           if (resp.ok) {
             const data = await resp.json();
@@ -141,7 +150,13 @@ export default function AcceptScreen({ navigation, route, db, apiUrl }) {
         } catch (fetchErr) {
           log.accept.warn('API submit failed (offline?)', fetchErr);
         }
-        // Offline fallback — queue locally
+        // Offline fallback — actually queue it this time. This used to just
+        // show a QR code and forget the lot ever existed: no local DB (db is
+        // always null in this build), no queue, nothing — the lot was gone
+        // the moment the collector left this screen. Now it survives in
+        // AsyncStorage until flushLotOutbox() (App.js, on every foreground)
+        // gets a real connection to retry it.
+        await queueLot(body, { recyclerName: recycler?.name ?? null });
         announceAccepted();
         setLotRef(lotId);
         setReferenceCode(referenceCodeFromUuid(lotId));

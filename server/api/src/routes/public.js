@@ -49,7 +49,12 @@ publicRouter.get("/rates", async (req, res, next) => {
     const rawRates = await prisma.rate.findMany({
       where: {
         categoryId: { in: categoryIds },
-        recycler: { authorizationStatus: "VALID" }, // only authorized recyclers
+        // Both independent, both required — see the trust_badge_revoked
+        // comment on the Recycler model (schema.prisma). authorizationStatus
+        // is only ever set by mpcb-refresh.js from the MPCB register;
+        // trustBadgeRevoked is an admin override for a specific anomaly and
+        // must hide the recycler here just as effectively as going LAPSED.
+        recycler: { authorizationStatus: "VALID", trustBadgeRevoked: false },
       },
       orderBy: { validFrom: "desc" },
       include: {
@@ -162,16 +167,47 @@ publicRouter.get("/authorisation", async (_req, res, next) => {
   }
 });
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 publicRouter.post("/lots", async (req, res, next) => {
   try {
     const {
       collectorId, categoryCode, unit, quantity, condition,
       sourceType, recyclerId, acceptedRate, deviceId,
       estimatedValue, collectionTs, collectionLat, collectionLng,
+      lotId: requestedLotId,
     } = req.body ?? {};
 
     if (!collectorId || !categoryCode || !unit || !quantity || !condition || !recyclerId || !deviceId) {
       return res.status(400).json({ error: "missing_required_fields" });
+    }
+    if (requestedLotId != null && !UUID_PATTERN.test(requestedLotId)) {
+      return res.status(400).json({ error: "invalid_lot_id" });
+    }
+
+    // Retry-safe, checked BEFORE any other validation: a client that queued
+    // this lot after a request that actually succeeded (response lost before
+    // it reached the app — a crash, a dropped connection right after the
+    // server committed) resends the identical body from AcceptScreen's
+    // outbox. That resend must be a no-op, not a fresh validation pass —
+    // whatever recycler/category state existed at the time of the original,
+    // successful create is what created this lot, and re-checking it now
+    // (the recycler could have gone LAPSED since, e.g.) must not turn a
+    // replay of a real success into a spurious error. Same "replay is a
+    // no-op" rule /sync/push already follows.
+    if (requestedLotId) {
+      const existing = await prisma.lot.findUnique({
+        where: { id: requestedLotId },
+        select: { id: true },
+      });
+      if (existing) {
+        log.req.info("POST /public/lots — replay of already-created lot", { lotId: existing.id, deviceId });
+        return res.status(200).json({
+          lotId: existing.id,
+          deviceId,
+          referenceCode: referenceCodeFromUuid(existing.id),
+        });
+      }
     }
 
     const category = await prisma.category.findFirst({ where: { code: categoryCode.toUpperCase() } });
@@ -180,7 +216,15 @@ publicRouter.post("/lots", async (req, res, next) => {
     const recycler = await prisma.recycler.findUnique({ where: { id: recyclerId } });
     if (!recycler) return res.status(400).json({ error: "unknown_recycler" });
 
-    const lotId = uuidv7();
+    // The QR code shown to a collector must never point at a lot id the
+    // server later decided not to use. AcceptScreen.jsx generates lotId
+    // BEFORE this call ever fires (it needs a reference code to display even
+    // if the request fails and is queued for retry), so honouring it here —
+    // rather than always minting a fresh one — is what keeps that code valid
+    // once a delayed retry actually reaches the server. Falling back to a
+    // server-generated id keeps any other caller that never sends one working
+    // exactly as before.
+    const lotId = requestedLotId ?? uuidv7();
     const acceptanceId = uuidv7();
     const now = new Date();
 

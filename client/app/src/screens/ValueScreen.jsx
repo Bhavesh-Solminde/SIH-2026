@@ -64,7 +64,7 @@ const MATERIAL_LABEL_KEYS = {
 
 export default function ValueScreen({ navigation, route, db, apiUrl }) {
   const t = useStrings();
-  const { speak, speakNumber } = useVoice();
+  const { speakKey, speakNumber } = useVoice();
   const { lang } = useLanguage();
 
   // Announce the screen once, on entry. This is the whole spoken output of
@@ -75,8 +75,8 @@ export default function ValueScreen({ navigation, route, db, apiUrl }) {
   // from the button under it.
   useFocusEffect(
     useCallback(() => {
-      speak(t('value_label'));
-    }, [speak, t])
+      speakKey('value_label');
+    }, [speakKey])
   );
 
   const {

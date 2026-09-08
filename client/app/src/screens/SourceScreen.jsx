@@ -20,13 +20,13 @@ const SOURCES = ['household','shop','office','institutional','street','other'];
 
 export default function SourceScreen({ navigation, route }) {
   const t = useStrings();
-  const { speak } = useVoice();
+  const { speakKey } = useVoice();
   const { category, subCategory, quantity, unit, condition, ...upstream } = route.params ?? {};
 
   useFocusEffect(
     useCallback(() => {
-      speak(t('source_label'));
-    }, [speak, t])
+      speakKey('source_label');
+    }, [speakKey])
   );
   const timerRef = useRef(null);
 

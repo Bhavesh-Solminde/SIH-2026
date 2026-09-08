@@ -72,7 +72,7 @@ function computeTotals(lots) {
 
 export default function LedgerScreen({ navigation, db, apiUrl }) {
   const t = useStrings();
-  const { speak } = useVoice();
+  const { speakKey } = useVoice();
   const [lots, setLots] = useState([]);
   const [totals, setTotals] = useState({ week: 0, month: 0 });
   const [loading, setLoading] = useState(false);
@@ -83,8 +83,8 @@ export default function LedgerScreen({ navigation, db, apiUrl }) {
 
   useFocusEffect(
     useCallback(() => {
-      speak(t('earnings_title'));
-    }, [speak, t])
+      speakKey('earnings_title');
+    }, [speakKey])
   );
 
   const load = useCallback(async () => {
@@ -167,7 +167,7 @@ export default function LedgerScreen({ navigation, db, apiUrl }) {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       log.handover.warn('collector reported a problem', { lotId });
-      speak(t('report_problem_success'));
+      speakKey('report_problem_success');
       setReportingItem(null);
     } catch (err) {
       log.handover.error('report submit failed', err);
