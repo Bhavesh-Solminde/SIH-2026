@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../db.js";
+import { respondToAcceptance } from "../lib/acceptanceResponse.js";
+import { log } from "../lib/logger.js";
 
 export const lotsRouter = Router();
 
@@ -61,10 +63,30 @@ function formatLot(lot, handoverStatus = null, refCode = null) {
 
 // GET /lots/:reference_code — QR lookup
 // Returns lot details with accepted rate. Works before AND after a handover exists.
-// No auth required: the QR is scanned at the physical handover point.
+// No auth required: the QR is scanned at the physical handover point, and an
+// anonymous scan must still resolve (public-lots-reference.test.js exercises
+// exactly that path) — so the session below is read softly, never required.
+//
+// A logged-in recycler scanning this lot IS their acknowledgment: they do not
+// scan a lot they have no intention of inspecting, so making them separately
+// visit the Incoming queue and tap Accept first is a redundant step this
+// endpoint can now skip — see lib/acceptanceResponse.js, shared with the
+// explicit POST /recycler/acceptances/:id/respond path.
 lotsRouter.get("/:reference_code", async (req, res, next) => {
   try {
     const { reference_code } = req.params;
+
+    let scanningRecycler = null;
+    const token = req.cookies?.bhaav_session;
+    if (token) {
+      const session = await prisma.recyclerSession.findUnique({
+        where: { token },
+        include: { account: { include: { recycler: { select: { id: true, name: true } } } } },
+      });
+      if (session && session.expiresAt >= new Date() && session.account.recycler) {
+        scanningRecycler = session.account.recycler;
+      }
+    }
 
     // Phase A: handover already exists → use it (fastest path, indexed lookup)
     const handover = await prisma.handover.findUnique({
@@ -105,9 +127,38 @@ lotsRouter.get("/:reference_code", async (req, res, next) => {
 
     if (!lot) return res.status(404).json({ error: "not_found" });
 
+    // Auto-acknowledge: this recycler's own NONE-state acceptance for this
+    // lot, if one exists. Scoped to recyclerId so scanning never touches
+    // another recycler's acceptance on the same lot. Failure here must never
+    // break the lookup the recycler is actually waiting on — log and continue.
+    let acknowledged = false;
+    if (scanningRecycler) {
+      try {
+        const pending = await prisma.acceptance.findFirst({
+          where: { lotId: lot.id, recyclerId: scanningRecycler.id, recyclerResponse: "NONE" },
+        });
+        if (pending) {
+          await respondToAcceptance({
+            acceptance: { ...pending, lot },
+            canonical: "ACCEPT",
+            recyclerName: scanningRecycler.name,
+          });
+          acknowledged = true;
+          log.recycler.info("auto-acknowledged on QR scan", {
+            lotId: lot.id, recyclerId: scanningRecycler.id,
+          });
+        }
+      } catch (err) {
+        log.recycler.warn("auto-acknowledge on scan failed", {
+          lotId: lot.id, recyclerId: scanningRecycler.id, message: err.message,
+        });
+      }
+    }
+
     return res.json({
       reference_code,
       handover_status: null,
+      acknowledged,
       lot: formatLot(lot),
     });
   } catch (err) {

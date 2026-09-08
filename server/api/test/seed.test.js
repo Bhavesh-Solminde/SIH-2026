@@ -47,9 +47,20 @@ describe("seedAll", () => {
   });
 
   it("creates exactly three console accounts — the three registered buyers", async () => {
-    const accounts = await prisma.recyclerAccount.findMany({ include: { recycler: true } });
+    // 2026-09-07: seedAll also creates one ADMIN account (admin@bhaav.demo,
+    // recyclerId null) for the admin console — filtered out here so this
+    // assertion keeps meaning what its title says. See seedAdminAccount in
+    // seed/seed.js.
+    const accounts = await prisma.recyclerAccount.findMany({ where: { role: "RECYCLER" }, include: { recycler: true } });
     expect(accounts).toHaveLength(3);
     for (const a of accounts) expect(a.recycler.authorizationStatus).toBe("VALID");
+  });
+
+  it("also creates exactly one ADMIN account with no recycler attached", async () => {
+    const admins = await prisma.recyclerAccount.findMany({ where: { role: "ADMIN" } });
+    expect(admins).toHaveLength(1);
+    expect(admins[0].email).toBe("admin@bhaav.demo");
+    expect(admins[0].recyclerId).toBeNull();
   });
 
   it("geocodes Eco-Recycling Ltd, the lapsed one nearest the campus", async () => {

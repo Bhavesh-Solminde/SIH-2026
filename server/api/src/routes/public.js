@@ -274,9 +274,11 @@ publicRouter.get("/lots", async (req, res, next) => {
         category: { select: { code: true, nameMr: true, nameEn: true } },
         handover: {
           select: {
+            id: true,
             referenceCode: true,
             finalTotal: true,
             status: true,
+            inspectedCondition: true,
             recycler: { select: { name: true } },
           },
         },
@@ -313,6 +315,12 @@ publicRouter.get("/lots", async (req, res, next) => {
         referenceCode:  l.handover?.referenceCode ?? referenceCodeFromUuid(l.id),
         finalTotal:     l.handover?.finalTotal ? Number(l.handover.finalTotal) : null,
         recyclerName:   l.handover?.recycler?.name ?? null,
+        // Only meaningful once status is AWAITING_CONFIRM (a live
+        // PENDING_COLLECTOR handover) — the app's My Lots screen (merged
+        // Requests + Lots) uses these to power Agree/Disagree on exactly
+        // that subset, without a second fetch to /handover/pending.
+        handoverId:         l.handover?.id ?? null,
+        inspectedCondition: l.handover?.inspectedCondition ?? null,
       };
     });
 

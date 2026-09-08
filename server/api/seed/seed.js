@@ -173,6 +173,24 @@ async function seedRatesAndAccounts(prisma, recyclers, byCode) {
   return { accounts, rates };
 }
 
+// The admin console has no recycler to belong to (recyclerId is nullable —
+// see prisma/migrations/20260907095852_add_admin_role_and_flag_indexes).
+// Same demo password as every recycler account, for the same reason: a
+// hackathon fixture written on the demo card, with no production deployment
+// for it to leak into.
+async function seedAdminAccount(prisma) {
+  return prisma.recyclerAccount.upsert({
+    where: { email: "admin@bhaav.demo" },
+    update: {},
+    create: {
+      email: "admin@bhaav.demo",
+      passwordHash: await hashPassword(DEMO_PASSWORD),
+      role: "ADMIN",
+      recyclerId: null,
+    },
+  });
+}
+
 export async function seedAll(prisma) {
   const byCode = await seedCategories(prisma);
   await seedConditionFactors(prisma);
@@ -182,6 +200,7 @@ export async function seedAll(prisma) {
   // The external price reference. Runs after categories, because the mapping
   // it writes is keyed on Category.code.
   const metalMandi = await seedMetalMandi(prisma);
+  await seedAdminAccount(prisma);
   return {
     categories: byCode.size,
     recyclers: recyclers.length,
@@ -189,6 +208,7 @@ export async function seedAll(prisma) {
     rates: rates.length,
     referencePrices: metalMandi.raw.imported,
     referenceCategoriesResolved: metalMandi.mapping.resolved,
+    adminAccount: "admin@bhaav.demo",
   };
 }
 
@@ -198,5 +218,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const result = await seedAll(prisma);
   console.log("seeded", result);
   console.log(`console logins: ${DEMO_PASSWORD}`);
+  console.log(`admin login: admin@bhaav.demo / ${DEMO_PASSWORD}`);
   await prisma.$disconnect();
 }

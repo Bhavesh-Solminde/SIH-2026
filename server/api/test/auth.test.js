@@ -107,6 +107,52 @@ describe("GET /auth/me", () => {
   });
 });
 
+describe("GET /auth/me — mpcbVerified badge", () => {
+  beforeEach(() => truncateAll());
+
+  async function loginAs(recyclerOverrides) {
+    const recycler = await makeRecycler(recyclerOverrides);
+    const passwordHash = await hashPassword("secret");
+    const account = await prisma.recyclerAccount.create({
+      data: { recyclerId: recycler.id, email: `r-${recycler.id.slice(0, 8)}@example.com`, passwordHash },
+    });
+    const agent = request.agent(createApp());
+    await agent.post("/auth/login").send({ email: account.email, password: "secret" });
+    return agent;
+  }
+
+  it("true for a VALID, non-revoked recycler", async () => {
+    const agent = await loginAs({ authorizationStatus: "VALID", trustBadgeRevoked: false });
+    const res = await agent.get("/auth/me");
+    expect(res.status).toBe(200);
+    expect(res.body.mpcbVerified).toBe(true);
+  });
+
+  it("false when authorizationStatus is LAPSED_IN_LIST, even if not revoked", async () => {
+    const agent = await loginAs({ authorizationStatus: "LAPSED_IN_LIST", trustBadgeRevoked: false });
+    const res = await agent.get("/auth/me");
+    expect(res.body.mpcbVerified).toBe(false);
+  });
+
+  it("false when an admin has revoked the badge, even though VALID", async () => {
+    const agent = await loginAs({ authorizationStatus: "VALID", trustBadgeRevoked: true });
+    const res = await agent.get("/auth/me");
+    expect(res.body.mpcbVerified).toBe(false);
+  });
+
+  it("is null (not false) for an admin session — no recycler to have a badge", async () => {
+    const passwordHash = await hashPassword("secret");
+    const account = await prisma.recyclerAccount.create({
+      data: { recyclerId: null, email: "admin-badge@example.com", passwordHash, role: "ADMIN" },
+    });
+    const agent = request.agent(createApp());
+    await agent.post("/auth/login").send({ email: account.email, password: "secret" });
+
+    const res = await agent.get("/auth/me");
+    expect(res.body.mpcbVerified).toBeNull();
+  });
+});
+
 describe("POST /auth/logout", () => {
   beforeEach(() => truncateAll());
 

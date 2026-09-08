@@ -24,6 +24,7 @@ import {
   makeCategory,
   makeCollector,
   makeLot,
+  makePhoto,
 } from "./helpers/db.js";
 import { hashPassword } from "../src/lib/password.js";
 import { uuidv7 } from "@bhaav/core/ids";
@@ -105,7 +106,10 @@ describe("POST /handover/:lot_id/dispute", () => {
     const { account, lot } = await setupFull();
     const agent = await loginAgent(app, account.email);
     await agent.post("/handover").send({ lot_id: lot.id, inspected_condition: "GOOD", final_unit_price: 380 });
-    await request(app).post(`/handover/${lot.id}/confirm`).send();
+    await makePhoto({ lotId: lot.id });
+    await request(app)
+      .post(`/handover/${lot.id}/confirm`)
+      .send({ handoverLat: 19.076, handoverLng: 72.877 });
 
     const res = await request(app).post(`/handover/${lot.id}/dispute`).send({});
 

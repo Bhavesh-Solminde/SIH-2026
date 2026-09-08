@@ -31,9 +31,10 @@ function loadRepoEnv() {
 }
 loadRepoEnv();
 
-// DATABASE_URL_TEST is set to Supabase deliberately (see .env). Every test
-// truncates all 11 tables first, so a run empties that database. The local
-// fallback below only applies if .env is missing entirely.
+// DATABASE_URL_TEST must point at a LOCAL, disposable database (see .env).
+// Every test truncates all 11 tables first, so a run empties whatever this
+// resolves to — aiming it at Supabase wipes the demo data. The fallback below
+// is the same local cluster, and applies only if .env is missing entirely.
 process.env.DATABASE_URL =
   process.env.DATABASE_URL_TEST ?? "postgresql://solminde@localhost:5433/bhaav_test?schema=public";
 process.env.SESSION_SECRET = "test-secret";

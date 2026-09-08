@@ -49,4 +49,5 @@ export const api = {
   getBlob: (path) => requestBlob(path),
   post: (path, body) => request(path, { method: "POST", body }),
   postForm: (path, form) => request(path, { method: "POST", form }),
+  patch: (path, body) => request(path, { method: "PATCH", body }),
 };

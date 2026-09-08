@@ -13,6 +13,7 @@
     "migrate:deploy": "prisma migrate deploy",
     "generate": "prisma generate",
     "seed": "node --env-file=../../.env seed/seed.js",
+    "seed:demo": "node --env-file=../../.env scripts/seed-demo-transactions.js",
     "test": "vitest run",
     "db:backup": "node --env-file=../../.env scripts/db-snapshot.js backup",
     "db:restore": "node --env-file=../../.env scripts/db-snapshot.js restore",

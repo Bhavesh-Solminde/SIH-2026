@@ -2,10 +2,8 @@ import { Router } from "express";
 import { prisma } from "../db.js";
 import { requireSession } from "../middleware/requireSession.js";
 import { uuidv7, referenceCodeFromUuid } from "@bhaav/core/ids";
-import { callPredict } from "../lib/aiml.js";
-import { getReferencePrice } from "../lib/referencePrice.js";
 import { getBuyerOfferForLot } from "../lib/buyerOffer.js";
-import { refreshEntityFlagRate } from "../lib/entityAnomaly.js";
+import { scoreHandover } from "../lib/scoreHandover.js";
 import { log } from "../lib/logger.js";
 
 export const handoverRouter = Router();
@@ -221,163 +219,9 @@ handoverRouter.post("/", requireSession, async (req, res, next) => {
   }
 });
 
-/**
- * Market reference price for a category: the median RECYCLER_PUBLISHED rate
- * (current_rate view — DB.md 3.4) among other VALID recyclers, excluding the
- * recycler in this transaction. Returns null (never throws) if the lookup
- * fails or no other VALID recycler publishes a rate for this category —
- * callers must fall back to the buyer's own rate in that case.
- */
-async function marketReferencePrice(categoryId, excludeRecyclerId) {
-  try {
-    const rows = await prisma.$queryRaw`
-      SELECT cr.price
-      FROM current_rate cr
-      JOIN recycler r ON r.id = cr.recycler_id
-      WHERE cr.category_id = ${categoryId}::uuid
-        AND cr.recycler_id <> ${excludeRecyclerId}::uuid
-        AND r.authorization_status = 'VALID'
-    `;
-    const prices = rows.map((r) => Number(r.price)).filter((p) => Number.isFinite(p));
-    if (prices.length === 0) return null;
-
-    prices.sort((a, b) => a - b);
-    const mid = prices.length >> 1;
-    const median = prices.length % 2 === 1 ? prices[mid] : (prices[mid - 1] + prices[mid]) / 2;
-    return +median.toFixed(2);
-  } catch (err) {
-    log.handover.warn("market reference lookup failed", { reason: err.message });
-    return null;
-  }
-}
-
-/**
- * Where the reference price for a transaction comes from, best source first.
- *
- * reference_price must be an INDEPENDENT yardstick, not this recycler's own
- * published rate. Sending the same value for reference_price and
- * buyer_offer_per_kg pins buyer_reference_ratio at a constant 1.0 and
- * collapses negotiation_gap_pct into abs_price_deviation_pct — the deployed
- * model ends up running on two independent signals out of five instead of the
- * four it was designed around.
- *
- *   RESOLVED       Metal Mandi, the published external scrap rate. Best: it is
- *                  outside the transaction entirely, so no party to the deal
- *                  can move it.
- *   MARKET_MEDIAN  the median rate other VALID recyclers publish for this
- *                  category. Usable, but circular in the small — the people
- *                  being scored are the ones setting it.
- *   BUYER_FALLBACK the buyer's own accepted rate. A degraded score, and the
- *                  status records that honestly so a flag raised on it can be
- *                  read for what it is.
- */
-async function resolveReferencePrice({ categoryCode, categoryId, recyclerId, buyerOffer, buyerOfferUnit }) {
-  if (categoryCode) {
-    const external = await getReferencePrice(categoryCode).catch((err) => {
-      log.handover.warn("metal mandi lookup failed", { reason: err?.message });
-      return null;
-    });
-    if (external?.status === "RESOLVED" && external.price != null) {
-      return { price: external.price, unit: external.unit, status: "RESOLVED" };
-    }
-  }
-
-  const median = await marketReferencePrice(categoryId, recyclerId);
-  if (median != null) {
-    return { price: median, unit: buyerOfferUnit, status: "MARKET_MEDIAN" };
-  }
-
-  return { price: buyerOffer, unit: buyerOfferUnit, status: "BUYER_FALLBACK" };
-}
-
-/**
- * Fire-and-forget: call the Vercel ML model and persist any anomaly flag.
- * Never throws — callers must catch().
- */
-async function scoreHandover({
-  handoverId, lotId, recyclerId, collectorId, categoryId, categoryCode,
-  buyerOffer, buyerOfferUnit, finalPrice, condition,
-}) {
-  const reference = await resolveReferencePrice({
-    categoryCode, categoryId, recyclerId, buyerOffer, buyerOfferUnit,
-  });
-
-  // Record what the score was computed against BEFORE calling the model, so
-  // the number survives a model outage. Without this the reference lived only
-  // in a log line, and a flag could never be re-checked or explained after the
-  // fact. Resolving here rather than before handover.create keeps both lookups
-  // off /handover's response path — the two parties are standing at the gate
-  // waiting for it.
-  await prisma.handover.update({
-    where: { id: handoverId },
-    data: {
-      referencePriceSnapshot: reference.price,
-      referencePriceUnit: reference.unit,
-      referencePriceStatus: reference.status,
-    },
-  }).catch((err) => log.handover.warn("reference snapshot write failed", { reason: err?.message }));
-
-  const result = await callPredict({
-    reference_price: reference.price,
-    buyer_offer_per_kg: buyerOffer,
-    final_price_per_kg: finalPrice,
-    condition,
-  });
-
-  if (!result.ok) {
-    console.log(`[handover/score] fail-open: ${result.reason}`);
-    return;
-  }
-
-  // Only a handover the model actually verdicted counts toward either
-  // party's flag rate (see entityAnomaly.js). Set here, not alongside the
-  // reference snapshot above, precisely because this line is unreachable on
-  // an outage.
-  await prisma.handover.update({
-    where: { id: handoverId },
-    data: { mlScoredAt: new Date() },
-  }).catch((err) => log.handover.warn("ml-scored-at write failed", { reason: err?.message }));
-
-  const { anomaly, score, risk_level, features } = result.body;
-  console.log(`[handover/score] lot=${lotId} anomaly=${anomaly} score=${score} risk=${risk_level}`);
-
-  if (anomaly) {
-    // Write a WARN or CRITICAL flag depending on risk level
-    const severity = risk_level === "CRITICAL" ? "CRITICAL" : "WARN";
-    await prisma.anomalyFlag.create({
-      data: {
-        subjectType: "HANDOVER",
-        subjectId: handoverId,
-        detectorCode: "ML_PRICE_ANOMALY",
-        severity,
-        detail: {
-          // Who the flag is about. A flag that names only a handover id makes
-          // the reviewer join three tables before they know whose transaction
-          // they are looking at.
-          collector_id: collectorId,
-          recycler_id: recyclerId,
-          reference_price: reference.price,
-          reference_price_status: reference.status,
-          buyer_offer_per_kg: buyerOffer,
-          final_price_per_kg: finalPrice,
-          score,
-          risk_level,
-          features,
-        },
-      },
-    }).catch((err) => console.warn("[handover/score] flag write error:", err.message));
-  }
-
-  // Whether THIS transaction was flagged or not, both parties' flag rates
-  // need re-checking: a clean transaction can pull a party's rate back below
-  // FLAG_RATE_THRESHOLD just as an anomalous one can push it over. See
-  // entityAnomaly.js — this is the party-level verdict that replaces the
-  // rule-based detectors (D1-D13) for the live product.
-  await Promise.all([
-    refreshEntityFlagRate("RECYCLER", recyclerId),
-    refreshEntityFlagRate("COLLECTOR", collectorId),
-  ]);
-}
+// marketReferencePrice, resolveReferencePrice and scoreHandover moved to
+// ../lib/scoreHandover.js (2026-09-07) so the admin rescore endpoint can
+// call the exact same scoring path this route uses.
 
 // ---------------------------------------------------------------------------
 // GET /handover/by-lot/:lot_id  — no auth
@@ -487,20 +331,42 @@ handoverRouter.post("/:lot_id/dispute", async (req, res, next) => {
 //
 // The collector counter-signs the two-sided handover. Sets confirmed_at and
 // status = CONFIRMED, satisfying the DB check constraint.
+//
+// Requires a second, independent photo + GPS fix taken at THIS moment (see
+// client/app/src/screens/HandoverEvidenceScreen.jsx) — the lot's original
+// collection photo/location (CameraScreen, taken at pickup) describes a
+// different event and cannot stand in for it. Both are enforced here rather
+// than trusted from the client: handoverLat/Lng and an uploaded HANDOVER
+// photo must exist before the handover can move to CONFIRMED.
 // ---------------------------------------------------------------------------
 handoverRouter.post("/:lot_id/confirm", async (req, res, next) => {
   try {
     const { lot_id } = req.params;
     const { handoverLat, handoverLng } = req.body ?? {};
 
-    // Find the pending handover for this lot
+    // Find the pending handover for this lot. A lot_id that matches nothing
+    // (or an already-confirmed handover) is a 404 regardless of what else is
+    // wrong with the request — checked before the evidence requirements below
+    // so those two failure modes never compete for the same request.
     const handover = await prisma.handover.findUnique({
       where: { lotId: lot_id },
     });
-
-    // 404 if not found or already confirmed
     if (!handover || handover.collectorConfirmedAt !== null) {
       return res.status(404).json({ error: "handover_not_found_or_already_confirmed" });
+    }
+
+    const lat = handoverLat != null ? Number(handoverLat) : null;
+    const lng = handoverLng != null ? Number(handoverLng) : null;
+    if (lat === null || lng === null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return res.status(400).json({ error: "handover_location_required" });
+    }
+
+    const evidencePhoto = await prisma.photo.findFirst({
+      where: { lotId: lot_id, kind: "HANDOVER", uploadedAt: { not: null } },
+      select: { id: true },
+    });
+    if (!evidencePhoto) {
+      return res.status(400).json({ error: "handover_photo_required" });
     }
 
     const now = new Date();
@@ -509,8 +375,8 @@ handoverRouter.post("/:lot_id/confirm", async (req, res, next) => {
       data: {
         collectorConfirmedAt: now,
         status: "CONFIRMED",
-        handoverLat: handoverLat != null ? Number(handoverLat) : undefined,
-        handoverLng: handoverLng != null ? Number(handoverLng) : undefined,
+        handoverLat: lat,
+        handoverLng: lng,
       },
     });
 

@@ -1,5 +1,6 @@
 node_modules/
 .env
+.env.bak.*
 .env.local
 .env.prod
 **/.env.prod
@@ -8,6 +9,11 @@ dist/
 coverage/
 *.log
 server/api/uploads/
+# PHOTO_DIR resolves relative to cwd; running vitest from inside server/api
+# (rather than the repo root) doubles the path from .env's
+# ./server/api/uploads into server/api/server/api/uploads. Known bug, not
+# yet fixed — this just stops the resulting junk from being committed.
+server/api/server/
 server/aiml/.venv/
 server/aiml/__pycache__/
 **/__pycache__/

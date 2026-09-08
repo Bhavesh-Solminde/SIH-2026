@@ -26,8 +26,13 @@ const catalogue = {
   // ---------------------------------------------------------------------
   nav_home:            { mr: 'नवीन',            hi: 'नया',                en: 'New' },
   nav_home_header:     { mr: 'भाव संग्राहक',     hi: 'भाव संग्राहक',        en: 'Bhaav Collector' },
-  nav_requests:        { mr: 'विनंत्या',         hi: 'अनुरोध',              en: 'Requests' },
-  nav_requests_header: { mr: 'प्रलंबित विनंत्या', hi: 'लंबित अनुरोध',        en: 'Pending Requests' },
+  // "Requests" was renamed to "My Lots" and absorbed the standalone Lots tab
+  // (full lifecycle: not-yet-inspected, awaiting confirmation, confirmed,
+  // disputed) — one screen instead of two. Route name stays "Requests" so
+  // navigation.navigate('Requests') call sites are untouched; only the
+  // displayed label changed.
+  nav_requests:        { mr: 'माझे लॉट्स',       hi: 'मेरे लॉट्स',           en: 'My Lots' },
+  nav_requests_header: { mr: 'माझे लॉट्स',       hi: 'मेरे लॉट्स',           en: 'My Lots' },
   nav_lots:            { mr: 'नोंदी',            hi: 'प्रविष्टियाँ',         en: 'Lots' },
   nav_lots_header:     { mr: 'माझ्या नोंदी',      hi: 'मेरी प्रविष्टियाँ',    en: 'My Lots' },
   nav_ledger:          { mr: 'कमाई',            hi: 'कमाई',               en: 'Earnings' },
@@ -132,6 +137,20 @@ const catalogue = {
   earnings_today:      { mr: 'आजची कमाई',          hi: 'आज की कमाई',           en: "Today's Earnings" },
   earnings_week:       { mr: 'या आठवड्याची कमाई',   hi: 'इस सप्ताह की कमाई',     en: 'This Week' },
   earnings_month:      { mr: 'या महिन्याची कमाई',    hi: 'इस माह की कमाई',       en: 'This Month' },
+
+  // ---------------------------------------------------------------------
+  // Report a problem — filed from Earnings history against a transaction
+  // that may already be confirmed (POST /reports/:lot_id).
+  // ---------------------------------------------------------------------
+  report_problem_action:    { mr: 'तक्रार करा', hi: 'शिकायत करें', en: 'Report a problem' },
+  report_problem_title:     { mr: 'काय चुकीचे आहे?', hi: 'क्या गलत है?', en: "What's wrong?" },
+  report_problem_amount:    { mr: '₹{amount} बद्दल', hi: '₹{amount} के बारे में', en: 'About ₹{amount}' },
+  report_problem_placeholder: { mr: 'येथे लिहा…', hi: 'यहाँ लिखें…', en: 'Describe the issue…' },
+  report_problem_submit:    { mr: 'तक्रार पाठवा', hi: 'शिकायत भेजें', en: 'Submit report' },
+  report_problem_cancel:    { mr: 'रद्द करा', hi: 'रद्द करें', en: 'Cancel' },
+  report_problem_empty:     { mr: 'कृपया तपशील लिहा', hi: 'कृपया विवरण लिखें', en: 'Please describe the issue' },
+  report_problem_success:   { mr: 'तक्रार नोंदवली', hi: 'शिकायत दर्ज की गई', en: 'Report submitted' },
+  report_problem_failed:    { mr: 'तक्रार पाठवता आली नाही', hi: 'शिकायत नहीं भेजी जा सकी', en: 'Could not submit report' },
   price_board_title:   { mr: 'दर पत्रक',            hi: 'दर पट्टिका',            en: 'Price Board' },
   price_board_per_kg:  { mr: 'प्रति किलो',          hi: 'प्रति किलो',            en: 'per kg' },
   price_board_per_pc:  { mr: 'प्रति नग',            hi: 'प्रति नग',              en: 'per pc' },
@@ -186,6 +205,23 @@ const catalogue = {
   voice_handover_confirmed: { mr: 'हस्तांतरण पुष्टी झाली',   hi: 'हस्तांतरण की पुष्टि हो गई', en: 'Handover confirmed' },
   voice_error_generic:      { mr: 'चूक झाली, पुन्हा प्रयत्न करा', hi: 'त्रुटि हुई, दोबारा प्रयास करें', en: 'Something went wrong, please try again' },
   voice_dispute_recorded:   { mr: 'तुमचा आक्षेप नोंदवला',    hi: 'आपकी आपत्ति दर्ज कर ली गई',  en: 'Your objection has been recorded' },
+
+  // ---------------------------------------------------------------------
+  // Handover evidence — photo + GPS captured on the collector's device
+  // after the recycler sends the offer and before it is accepted.
+  // ---------------------------------------------------------------------
+  evidence_header:            { mr: 'हस्तांतरणाचा पुरावा', hi: 'हस्तांतरण का प्रमाण', en: 'Handover evidence' },
+  evidence_prompt:            { mr: 'स्वीकारण्यापूर्वी मालाचा फोटो घ्या', hi: 'स्वीकार करने से पहले माल की फ़ोटो लें', en: 'Take a photo of the handover before you accept' },
+  evidence_locating:          { mr: 'स्थान शोधत आहे…', hi: 'स्थान खोजा जा रहा है…', en: 'Finding your location…' },
+  evidence_location_ready:    { mr: 'स्थान मिळाले', hi: 'स्थान मिल गया', en: 'Location captured' },
+  evidence_location_denied:   { mr: 'स्थान परवानगीशिवाय पुढे जाता येणार नाही', hi: 'स्थान अनुमति के बिना आगे नहीं बढ़ सकते', en: 'Cannot continue without location permission' },
+  evidence_location_failed:   { mr: 'स्थान मिळाले नाही, पुन्हा प्रयत्न करा', hi: 'स्थान नहीं मिला, दोबारा प्रयास करें', en: 'Could not get location, try again' },
+  evidence_retry_location:    { mr: 'पुन्हा प्रयत्न करा', hi: 'दोबारा प्रयास करें', en: 'Retry' },
+  evidence_retake:            { mr: 'पुन्हा फोटो घ्या', hi: 'दोबारा फ़ोटो लें', en: 'Retake photo' },
+  evidence_uploading:         { mr: 'फोटो पाठवत आहे…', hi: 'फ़ोटो भेजी जा रही है…', en: 'Uploading photo…' },
+  evidence_upload_failed:     { mr: 'फोटो पाठवता आली नाही, पुन्हा प्रयत्न करा', hi: 'फ़ोटो नहीं भेजी जा सकी, दोबारा प्रयास करें', en: 'Could not upload photo, try again' },
+  evidence_confirm_and_agree: { mr: 'पुष्टी करा आणि सहमत व्हा', hi: 'पुष्टि करें और सहमत हों', en: 'Confirm & Agree' },
+  evidence_cancel:            { mr: 'रद्द करा', hi: 'रद्द करें', en: 'Cancel' },
 
   // ---------------------------------------------------------------------
   // Safety cards
