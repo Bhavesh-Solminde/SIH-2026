@@ -25,7 +25,10 @@ async function loadSnapshot() {
   const [categories, recyclers, rateRows, factors] = await Promise.all([
     prisma.category.findMany({ orderBy: { code: "asc" } }),
     prisma.recycler.findMany({
-      where: { authorizationStatus: "VALID" },
+      // trustBadgeRevoked: an admin override independent of
+      // authorizationStatus (mpcb-refresh.js owns that one) — see the
+      // schema.prisma comment on Recycler.trustBadgeRevoked.
+      where: { authorizationStatus: "VALID", trustBadgeRevoked: false },
       orderBy: { name: "asc" },
     }),
     // current_rate collapses the append-only rate history to the single newest
@@ -37,7 +40,7 @@ async function loadSnapshot() {
       FROM current_rate cr
       JOIN recycler r ON r.id = cr.recycler_id
       JOIN category c ON c.id = cr.category_id
-      WHERE r.authorization_status = 'VALID'
+      WHERE r.authorization_status = 'VALID' AND r.trust_badge_revoked = false
       ORDER BY r.name, c.code`,
     prisma.conditionFactor.findMany(),
   ]);
@@ -131,17 +134,25 @@ syncRouter.get("/delta", async (req, res, next) => {
         where: { createdAt: { gt: since } },
         select: { code: true },
       }),
-      // Recyclers whose status is still VALID and whose record was updated
-      // after the cursor (e.g. a service-area or phone number change).
+      // Recyclers whose status is still VALID, badge not revoked, and whose
+      // record was updated after the cursor (e.g. a service-area or phone
+      // number change). A revoked recycler is not "changed but still good" —
+      // it belongs in the removed set below, same as one that went LAPSED.
       prisma.recycler.findMany({
-        where: { updatedAt: { gt: since }, authorizationStatus: "VALID" },
+        where: { updatedAt: { gt: since }, authorizationStatus: "VALID", trustBadgeRevoked: false },
         select: { id: true },
       }),
-      // Recyclers that lapsed after the cursor. These must be sent in
-      // removedRecyclerIds so the device removes them from its local cache —
-      // otherwise a collector is routed to a facility that is no longer valid.
+      // Recyclers the device must drop from its local cache after the cursor:
+      // either the MPCB register lapsed them, or an admin revoked their trust
+      // badge (schema.prisma: Recycler.trustBadgeRevoked) after an anomaly.
+      // Both must remove them from the collector's cached list the same
+      // way — otherwise a collector is routed to a facility that is no
+      // longer valid, or one currently under an admin hold.
       prisma.recycler.findMany({
-        where: { updatedAt: { gt: since }, authorizationStatus: "LAPSED_IN_LIST" },
+        where: {
+          updatedAt: { gt: since },
+          OR: [{ authorizationStatus: "LAPSED_IN_LIST" }, { trustBadgeRevoked: true }],
+        },
         select: { id: true },
       }),
     ]);
@@ -158,7 +169,7 @@ syncRouter.get("/delta", async (req, res, next) => {
                    AND raw.valid_from  = cr.valid_from
       JOIN recycler r ON r.id = cr.recycler_id
       JOIN category c ON c.id = cr.category_id
-      WHERE r.authorization_status = 'VALID'
+      WHERE r.authorization_status = 'VALID' AND r.trust_badge_revoked = false
         AND raw.created_at > ${since}`;
 
     const changedCodes  = new Set(changedCategories.map((c) => c.code));

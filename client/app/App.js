@@ -49,6 +49,7 @@ import HandoverEvidenceScreen from './src/screens/HandoverEvidenceScreen';
 
 // Sync engine
 import { syncAndGetPending } from './src/screens/SyncEngine';
+import { flushLotOutbox } from './src/lib/lotOutbox';
 
 // The phone already knows this laptop's address — it reached the Expo dev server
 // over it — so derive the API host from that instead of hardcoding an IP.
@@ -228,13 +229,20 @@ export default function App() {
   const db = null;
 
   useEffect(() => {
+    // syncAndGetPending no-ops today — db is always null here (Expo Go has
+    // no native SQLite), so SyncEngine's own outbox is dead code. It's kept
+    // for when that changes. flushLotOutbox is the outbox that's actually
+    // live right now: lots AcceptScreen couldn't submit live in
+    // AsyncStorage, retried on every foreground.
     const sub = AppState.addEventListener('change', (next) => {
       if (appStateRef.current.match(/inactive|background/) && next === 'active') {
         syncAndGetPending(API_BASE_URL, db).catch(() => {});
+        flushLotOutbox(API_BASE_URL).catch(() => {});
       }
       appStateRef.current = next;
     });
     syncAndGetPending(API_BASE_URL, db).catch(() => {});
+    flushLotOutbox(API_BASE_URL).catch(() => {});
     return () => sub.remove();
   }, []);
 

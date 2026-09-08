@@ -13,6 +13,8 @@ import { useStrings } from '../i18n/useStrings';
 import { useLanguage } from '../i18n/LanguageContext';
 import { CategoryIcon } from '../components/CategoryIcon';
 import { getDeviceId } from '../lib/deviceId';
+import { getQueuedLots } from '../lib/lotOutbox';
+import { referenceCodeFromUuid } from '@bhaav/core/ids';
 import { log } from '../lib/logger';
 
 /**
@@ -33,18 +35,23 @@ import { log } from '../lib/logger';
 const CONDITION_COLOR = conditionColors;
 const STATUS_COLOR = statusColors;
 
+// CONFIRMED has no entry here — a completed exchange is filtered out of
+// fetchLots() below before it ever reaches this screen's state. Once done,
+// a lot's home is Earnings (LedgerScreen), which already lists every
+// CONFIRMED transaction with its final amount; showing it here too would
+// just be the same fact in two places, one of them stale the moment a
+// dispute gets filed after the fact (Report a problem, from Earnings).
 const STATUS_LABEL_KEY = {
   PENDING:          'handover_pending',
   AWAITING_CONFIRM: 'lot_status_awaiting_confirm',
-  CONFIRMED:        'lot_status_complete',
   DISPUTED:         'handover_disputed',
+  QUEUED_LOCALLY:   'accept_sync_pending',
 };
 
 const FILTERS = [
   { key: 'ALL',              labelKey: 'filter_all' },
   { key: 'AWAITING_CONFIRM', labelKey: 'filter_confirmation_short' },
   { key: 'PENDING',          labelKey: 'handover_pending' },
-  { key: 'CONFIRMED',        labelKey: 'lot_status_complete' },
 ];
 
 const DATE_LOCALE = { mr: 'mr-IN', hi: 'hi-IN', en: 'en-IN' };
@@ -56,10 +63,11 @@ export default function PendingRequestsScreen({ apiUrl, navigation }) {
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState('ALL');
   const [disputing, setDisputing] = useState(null);
-  const { speak, speakNumber } = useVoice();
+  const { speakKey, speakNumber } = useVoice();
 
   const fetchLots = useCallback(async () => {
     setLoading(true);
+    let serverLots = [];
     try {
       const deviceId = await getDeviceId();
       const res = await fetch(
@@ -68,13 +76,43 @@ export default function PendingRequestsScreen({ apiUrl, navigation }) {
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setLots(data.lots ?? []);
-      log.sync.info('my lots loaded', { count: (data.lots ?? []).length });
+      // A completed exchange belongs in Earnings (LedgerScreen), which
+      // already lists it with its final amount — not here too.
+      serverLots = (data.lots ?? []).filter((l) => l.status !== 'CONFIRMED');
+      log.sync.info('my lots loaded', { count: serverLots.length });
     } catch (err) {
       log.sync.warn('fetch lots failed', err);
-    } finally {
-      setLoading(false);
+      // Fall through anyway — a queued lot still needs to be shown even (in
+      // fact, especially) when the server fetch itself just failed. This is
+      // exactly the moment lib/lotOutbox.js exists for.
     }
+
+    // Lots AcceptScreen couldn't submit live, waiting in AsyncStorage for
+    // flushLotOutbox() to retry on the next foreground. A queued entry
+    // never appears in serverLots (the server has never heard of it), so
+    // there's nothing to de-duplicate against — once a flush succeeds, this
+    // list stops returning it and the next fetchLots() picks it up from
+    // serverLots instead.
+    const queued = await getQueuedLots().catch(() => []);
+    const queuedAsLots = queued.map((entry) => ({
+      lotId: entry.lotId,
+      categoryCode: entry.body.categoryCode ?? null,
+      categoryNameMr: null,
+      quantity: Number(entry.body.quantity ?? 0),
+      unit: entry.body.unit,
+      condition: entry.body.condition,
+      estimatedValue: Number(entry.body.estimatedValue ?? 0),
+      collectionTs: entry.body.collectionTs ?? entry.queuedAt,
+      status: 'QUEUED_LOCALLY',
+      referenceCode: referenceCodeFromUuid(entry.lotId),
+      finalTotal: null,
+      recyclerName: entry.meta?.recyclerName ?? null,
+      handoverId: null,
+      inspectedCondition: null,
+    }));
+
+    setLots([...queuedAsLots, ...serverLots]);
+    setLoading(false);
   }, [apiUrl]);
 
   useFocusEffect(
@@ -92,9 +130,9 @@ export default function PendingRequestsScreen({ apiUrl, navigation }) {
   useEffect(() => {
     if (loading) return;
     if (awaitingCount > 0) {
-      speak(t('requests_pending', { count: awaitingCount }));
+      speakKey('requests_pending', { count: awaitingCount });
     }
-  }, [loading, awaitingCount, speak, t]);
+  }, [loading, awaitingCount, speakKey]);
 
   // Read one amount back, digit by digit — "चार तीन नऊ एक शून्य" for ₹43,910.
   // Grammatical composition topped out at 9,999 and, above that, produced a
@@ -139,11 +177,11 @@ export default function PendingRequestsScreen({ apiUrl, navigation }) {
               });
               if (!res.ok) throw new Error(`HTTP ${res.status}`);
               log.handover.warn('collector disputed', { lotId: item.lotId });
-              speak(t('voice_dispute_recorded'));
+              speakKey('voice_dispute_recorded');
               await fetchLots();
             } catch (err) {
               log.handover.error('dispute failed', err);
-              speak(t('voice_error_generic'));
+              speakKey('voice_error_generic');
             } finally {
               setDisputing(null);
             }
