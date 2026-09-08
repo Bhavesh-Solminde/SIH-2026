@@ -24,13 +24,13 @@ const CONDITIONS = [
 
 export default function ConditionScreen({ navigation, route }) {
   const t = useStrings();
-  const { speak } = useVoice();
+  const { speakKey } = useVoice();
   const { category, subCategory, quantity, unit, ...upstream } = route.params ?? {};
 
   useFocusEffect(
     useCallback(() => {
-      speak(t('condition_label'));
-    }, [speak, t])
+      speakKey('condition_label');
+    }, [speakKey])
   );
 
   const handleSelect = (condition, clip) => {

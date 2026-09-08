@@ -29,13 +29,13 @@ const NEEDS_SUB = new Set(['PCB', 'BATTERY', 'PANEL', 'MOTOR']);
 
 export default function CategoryScreen({ navigation, route }) {
   const t = useStrings();
-  const { speak } = useVoice();
+  const { speakKey } = useVoice();
   const upstream = route.params ?? {};
 
   useFocusEffect(
     useCallback(() => {
-      speak(t('category_label'));
-    }, [speak, t])
+      speakKey('category_label');
+    }, [speakKey])
   );
 
   const handleTap = (cat) => {

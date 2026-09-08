@@ -23,7 +23,7 @@ const PHASES = { QR: 'qr', CONFIRM: 'confirm', DONE: 'done' };
 
 export default function HandoverScreen({ navigation, route, db, apiUrl }) {
   const t = useStrings();
-  const { speak, speakNumber } = useVoice();
+  const { speakKey, speakNumber } = useVoice();
   const {
     lotId, referenceCode, finalTotal, handoverId,
     // params passed from PendingRequestsScreen (API-only mode)
@@ -32,8 +32,8 @@ export default function HandoverScreen({ navigation, route, db, apiUrl }) {
 
   useFocusEffect(
     useCallback(() => {
-      speak(t('handover_label'));
-    }, [speak, t])
+      speakKey('handover_label');
+    }, [speakKey])
   );
 
   const [phase, setPhase] = useState(PHASES.QR);
@@ -68,7 +68,7 @@ export default function HandoverScreen({ navigation, route, db, apiUrl }) {
     if (db && lotId) {
       try {
         await confirmHandover(db, { lotId, agree: true, protest: false });
-        speak(t('handover_confirmed'));
+        speakKey('handover_confirmed');
         setPhase(PHASES.DONE);
       } catch (err) {
         log.handover.error('confirm failed', err);
@@ -79,7 +79,7 @@ export default function HandoverScreen({ navigation, route, db, apiUrl }) {
       lotId,
       finalTotal: finalAmount,
       onConfirmed: () => {
-        speak(t('handover_confirmed'));
+        speakKey('handover_confirmed');
         setPhase(PHASES.DONE);
       },
     });
@@ -103,11 +103,11 @@ export default function HandoverScreen({ navigation, route, db, apiUrl }) {
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
       }
-      speak(t('voice_dispute_recorded'));
+      speakKey('voice_dispute_recorded');
       setPhase(PHASES.DONE);
     } catch (err) {
       log.handover.error('dispute failed', err);
-      speak(t('voice_error_generic'));
+      speakKey('voice_error_generic');
       setDisputed(false);
     }
   };

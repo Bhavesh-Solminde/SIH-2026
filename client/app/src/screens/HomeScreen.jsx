@@ -18,14 +18,14 @@ import { log } from '../lib/logger';
  */
 export default function HomeScreen({ navigation, db }) {
   const t = useStrings();
-  const { speak } = useVoice();
+  const { speakKey } = useVoice();
   const [pendingSync, setPendingSync] = useState(0);
   const [weekEarnings, setWeekEarnings] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
-      speak(t('home_title'));
-    }, [speak, t])
+      speakKey('home_title');
+    }, [speakKey])
   );
 
   const refresh = useCallback(async () => {

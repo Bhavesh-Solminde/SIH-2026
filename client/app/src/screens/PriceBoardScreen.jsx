@@ -33,13 +33,13 @@ export default function PriceBoardScreen({ db, apiUrl }) {
   // looks exactly like the server being down, so prefer no fallback at all.
   const API_BASE = apiUrl;
   const t = useStrings();
-  const { speak } = useVoice();
+  const { speakKey } = useVoice();
   const { lang } = useLanguage();
 
   useFocusEffect(
     useCallback(() => {
-      speak(t('price_board_title'));
-    }, [speak, t])
+      speakKey('price_board_title');
+    }, [speakKey])
   );
   // All three languages now ship a clip pack (see src/audio/clips.js), so the
   // read-aloud button is no longer restricted to mr/hi.

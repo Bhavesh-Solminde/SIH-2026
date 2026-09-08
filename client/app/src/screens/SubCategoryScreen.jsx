@@ -27,13 +27,13 @@ const SUB_MAP = {
 
 export default function SubCategoryScreen({ navigation, route }) {
   const t = useStrings();
-  const { speak } = useVoice();
+  const { speakKey } = useVoice();
   const { category, ...upstream } = route.params ?? {};
 
   useFocusEffect(
     useCallback(() => {
-      speak(t('subcategory_label'));
-    }, [speak, t])
+      speakKey('subcategory_label');
+    }, [speakKey])
   );
   const sub = SUB_MAP[category];
 

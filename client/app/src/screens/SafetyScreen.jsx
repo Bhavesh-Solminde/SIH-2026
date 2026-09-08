@@ -36,13 +36,13 @@ const CARDS = [
 export default function SafetyScreen({ navigation }) {
   const t = useStrings();
   const { lang } = useLanguage();
-  const { speak } = useVoice();
+  const { speakKey } = useVoice();
   const [current, setCurrent] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
-      speak(t('safety_title'));
-    }, [speak, t])
+      speakKey('safety_title');
+    }, [speakKey])
   );
   const listRef = useRef(null);
 

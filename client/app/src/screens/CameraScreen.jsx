@@ -43,13 +43,13 @@ const AREAS = ['Nalasopara', 'Vasai', 'Virar', 'Bhayandar', 'Thane', 'Mira Road'
 
 export default function CameraScreen({ navigation, route }) {
   const t = useStrings();
-  const { speak } = useVoice();
+  const { speakKey } = useVoice();
   const [permission, requestPermission] = useCameraPermissions();
 
   useFocusEffect(
     useCallback(() => {
-      speak(t('camera_prompt'));
-    }, [speak, t])
+      speakKey('camera_prompt');
+    }, [speakKey])
   );
   const [photos, setPhotos] = useState([]);
   const [location, setLocation] = useState(null);

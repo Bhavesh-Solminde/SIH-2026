@@ -38,7 +38,7 @@ try { FileSystem = require('expo-file-system'); } catch {}
 export default function HandoverEvidenceScreen({ route, navigation, apiUrl }) {
   const { lotId, finalTotal, onConfirmed } = route.params ?? {};
   const t = useStrings();
-  const { speak } = useVoice();
+  const { speakKey } = useVoice();
   const [permission, requestPermission] = useCameraPermissions();
 
   const [photoUri, setPhotoUri] = useState(null);
@@ -125,7 +125,7 @@ export default function HandoverEvidenceScreen({ route, navigation, apiUrl }) {
         throw new Error(`confirm_failed:${confirmRes.status}:${body.error ?? ''}`);
       }
 
-      speak(t('voice_handover_confirmed'));
+      speakKey('voice_handover_confirmed');
       // onConfirmed (from HandoverScreen's "Correct" flow) flips that
       // still-mounted screen straight to its DONE phase; goBack() then
       // reveals it already showing the confirmed amount. Without a caller
@@ -136,7 +136,7 @@ export default function HandoverEvidenceScreen({ route, navigation, apiUrl }) {
     } catch (err) {
       log.handover.error('evidence submit failed', err);
       setError(t('evidence_upload_failed'));
-      speak(t('voice_error_generic'));
+      speakKey('voice_error_generic');
     } finally {
       setSubmitting(false);
     }
@@ -167,11 +167,11 @@ export default function HandoverEvidenceScreen({ route, navigation, apiUrl }) {
               });
               if (!res.ok) throw new Error(`HTTP ${res.status}`);
               log.handover.warn('collector disputed at evidence step', { lotId });
-              speak(t('voice_dispute_recorded'));
+              speakKey('voice_dispute_recorded');
               navigation.goBack();
             } catch (err) {
               log.handover.error('dispute failed', err);
-              speak(t('voice_error_generic'));
+              speakKey('voice_error_generic');
               setError(t('evidence_upload_failed'));
             } finally {
               setDisputing(false);

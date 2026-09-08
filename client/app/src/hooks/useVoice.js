@@ -138,9 +138,9 @@ export function useVoice() {
    * This is the entry point every screen should use to announce itself.
    * Handing a resolved translation to speak() — what the screens did before —
    * always took the TTS path, which is silent on any handset with no mr-IN or
-   * hi-IN voice installed. (Do not write that old form literally anywhere
-   * under src/: test/audio/spoken-keys.test.js greps for it, comments
-   * included, and a doc comment showing the anti-pattern fails the gate.)
+   * hi-IN voice installed. test/audio/spoken-keys.test.js fails the build if
+   * that form reappears in any file under src/ except this one, which is
+   * where the fallback is legitimately implemented.
    *
    * Identity is stable across renders: `lang` is the only changing input, and
    * `t`, `speak` and `speakClips` are each memoised on `lang` too. Screens put

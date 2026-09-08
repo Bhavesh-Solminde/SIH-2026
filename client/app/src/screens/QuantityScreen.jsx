@@ -27,13 +27,13 @@ const KEYS = ['7','8','9','4','5','6','1','2','3','.','0','⌫'];
 
 export default function QuantityScreen({ navigation, route }) {
   const t = useStrings();
-  const { speak, speakClips, speakNumber } = useVoice();
+  const { speakKey, speakClips, speakNumber } = useVoice();
   const { category, subCategory, ...upstream } = route.params ?? {};
 
   useFocusEffect(
     useCallback(() => {
-      speak(t('quantity_label'));
-    }, [speak, t])
+      speakKey('quantity_label');
+    }, [speakKey])
   );
   const [unit, setUnit] = useState('KG');
   const [raw, setRaw] = useState('');
