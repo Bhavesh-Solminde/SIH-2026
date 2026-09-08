@@ -57,24 +57,32 @@ export default function HandoverScreen({ navigation, route, db, apiUrl }) {
     }
   }, [phase, finalAmount, speakNumber]);
 
+  // POST /handover/:lot_id/confirm now requires a second photo + GPS fix
+  // taken at this moment (see HandoverEvidenceScreen and the confirm-endpoint
+  // comment in server/api/src/routes/handover.js) — it 400s without them.
+  // Route there instead of confirming inline; onConfirmed lets this
+  // still-mounted screen switch to the DONE phase once evidence has been
+  // captured and the confirm actually succeeded.
   const handleCorrect = async () => {
     log.handover.info('collector agreed', { lotId, finalAmount });
-    try {
-      if (db && lotId) {
+    if (db && lotId) {
+      try {
         await confirmHandover(db, { lotId, agree: true, protest: false });
-      } else if (apiUrl && lotId) {
-        const res = await fetch(`${apiUrl}/handover/${lotId}/confirm`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        speak(t('handover_confirmed'));
+        setPhase(PHASES.DONE);
+      } catch (err) {
+        log.handover.error('confirm failed', err);
       }
-      speak(t('handover_confirmed'));
-      setPhase(PHASES.DONE);
-    } catch (err) {
-      log.handover.error('confirm failed', err);
+      return;
     }
+    navigation.navigate('HandoverEvidence', {
+      lotId,
+      finalTotal: finalAmount,
+      onConfirmed: () => {
+        speak(t('handover_confirmed'));
+        setPhase(PHASES.DONE);
+      },
+    });
   };
 
   // Disagreeing used to write only to a local database this build never

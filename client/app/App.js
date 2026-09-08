@@ -33,7 +33,6 @@ import HomeScreen            from './src/screens/HomeScreen';
 import PendingRequestsScreen from './src/screens/PendingRequestsScreen';
 import LedgerScreen          from './src/screens/LedgerScreen';
 import PriceBoardScreen      from './src/screens/PriceBoardScreen';
-import LotsScreen            from './src/screens/LotsScreen';
 
 // Stack screens (lot creation + standalone)
 import CameraScreen      from './src/screens/CameraScreen';
@@ -46,6 +45,7 @@ import ValueScreen       from './src/screens/ValueScreen';
 import AcceptScreen      from './src/screens/AcceptScreen';
 import HandoverScreen    from './src/screens/HandoverScreen';
 import SafetyScreen      from './src/screens/SafetyScreen';
+import HandoverEvidenceScreen from './src/screens/HandoverEvidenceScreen';
 
 // Sync engine
 import { syncAndGetPending } from './src/screens/SyncEngine';
@@ -70,15 +70,16 @@ const Tab   = createBottomTabNavigator();
 
 const TAB_ICON_NAMES = {
   Home:     { active: 'home',          inactive: 'home-outline' },
-  Requests: { active: 'document-text', inactive: 'document-text-outline' },
-  Lots:     { active: 'cube',          inactive: 'cube-outline' },
+  // "Requests" (route name unchanged) now displays as "My Lots" and covers
+  // the full lot lifecycle — the standalone Lots tab was merged into it, so
+  // this inherits its icon too.
+  Requests: { active: 'cube',          inactive: 'cube-outline' },
   Ledger:   { active: 'wallet',        inactive: 'wallet-outline' },
   Rates:    { active: 'bar-chart',     inactive: 'bar-chart-outline' },
 };
 
 // Stable wrappers for tab screens that don't use db
 const RequestsTab = (p) => <PendingRequestsScreen {...p} apiUrl={API_BASE_URL} />;
-const LotsTab     = (p) => <LotsScreen            {...p} apiUrl={API_BASE_URL} />;
 
 // The language switcher lives in every header (both navigators below) rather
 // than in one screen's body, so it's reachable no matter where the collector
@@ -139,11 +140,6 @@ function MainTabs({ db }) {
         name="Requests"
         component={RequestsTab}
         options={{ title: t('nav_requests'), headerTitle: t('nav_requests_header') }}
-      />
-      <Tab.Screen
-        name="Lots"
-        component={LotsTab}
-        options={{ title: t('nav_lots'), headerTitle: t('nav_lots_header') }}
       />
       <Tab.Screen
         name="Ledger"
@@ -215,6 +211,9 @@ function AppNavigator({ db }) {
         </Stack.Screen>
         <Stack.Screen name="Safety"   options={{ title: t('nav_safety') }}>
           {(p) => <SafetyScreen   {...p} db={db} />}
+        </Stack.Screen>
+        <Stack.Screen name="HandoverEvidence" options={{ title: t('evidence_header') }}>
+          {(p) => <HandoverEvidenceScreen {...p} apiUrl={API_BASE_URL} />}
         </Stack.Screen>
       </Stack.Navigator>
     </NavigationContainer>

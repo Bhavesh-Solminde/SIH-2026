@@ -16,6 +16,7 @@ import {
   makeCollector,
   makeLot,
   makeHandover,
+  makePhoto,
 } from "./helpers/db.js";
 import { hashPassword } from "../src/lib/password.js";
 import { uuidv7 } from "@bhaav/core/ids";
@@ -263,10 +264,15 @@ describe("POST /handover/:lot_id/confirm", () => {
     expect(postRes.status).toBe(200);
     const handover_id = postRes.body.handover_id;
 
+    // Confirm requires the second, independent photo + GPS fix (T17b) — see
+    // HandoverEvidenceScreen and the confirm-endpoint comment in
+    // routes/handover.js.
+    await makePhoto({ lotId: lot.id });
+
     // Now the collector confirms (no auth required)
     const confirmRes = await request(app)
       .post(`/handover/${lot.id}/confirm`)
-      .send();
+      .send({ handoverLat: 19.076, handoverLng: 72.877 });
 
     expect(confirmRes.status).toBe(200);
     expect(confirmRes.body.handover_id).toBe(handover_id);
@@ -294,14 +300,17 @@ describe("POST /handover/:lot_id/confirm", () => {
       inspected_condition: "FAIR",
       final_unit_price: 300,
     });
+    await makePhoto({ lotId: lot.id });
 
     // First confirm
     const first = await request(app)
       .post(`/handover/${lot.id}/confirm`)
-      .send();
+      .send({ handoverLat: 19.076, handoverLng: 72.877 });
     expect(first.status).toBe(200);
 
-    // Second confirm — should 404
+    // Second confirm — should 404 (checked before the evidence requirements,
+    // so a missing body here still surfaces the already-confirmed 404, not
+    // an evidence 400).
     const second = await request(app)
       .post(`/handover/${lot.id}/confirm`)
       .send();
@@ -335,10 +344,11 @@ describe("POST /handover/:lot_id/confirm", () => {
       inspected_condition: "FAIR",
       final_unit_price: settledUnitPrice,
     });
+    await makePhoto({ lotId: lot.id });
 
     const confirmRes = await request(app)
       .post(`/handover/${lot.id}/confirm`)
-      .send();
+      .send({ handoverLat: 19.076, handoverLng: 72.877 });
 
     expect(confirmRes.status).toBe(200);
     expect(confirmRes.body.final_price).toBeCloseTo(expectedTotal, 2);
@@ -347,5 +357,78 @@ describe("POST /handover/:lot_id/confirm", () => {
     const row = await prisma.handover.findUnique({ where: { lotId: lot.id } });
     expect(Number(row.finalUnitPrice)).toBeCloseTo(settledUnitPrice, 2);
     expect(Number(row.finalTotal)).toBeCloseTo(expectedTotal, 2);
+  });
+
+  // T17b — the second, independent photo + GPS fix (HandoverEvidenceScreen)
+  // is required before a handover can move to CONFIRMED.
+  it("400 — handoverLat/Lng are required", async () => {
+    const app = createApp();
+    const { account, lot } = await setupFull({ recyclerResponse: "ACKNOWLEDGED" });
+    const agent = await loginAgent(app, account.email);
+
+    await agent.post("/handover").send({
+      lot_id: lot.id, inspected_condition: "GOOD", final_unit_price: 300,
+    });
+    await makePhoto({ lotId: lot.id });
+
+    const res = await request(app).post(`/handover/${lot.id}/confirm`).send();
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("handover_location_required");
+
+    const row = await prisma.handover.findUnique({ where: { lotId: lot.id } });
+    expect(row.status).toBe("PENDING_COLLECTOR");
+    expect(row.collectorConfirmedAt).toBeNull();
+  });
+
+  it("400 — an uploaded HANDOVER photo is required", async () => {
+    const app = createApp();
+    const { account, lot } = await setupFull({ recyclerResponse: "ACKNOWLEDGED" });
+    const agent = await loginAgent(app, account.email);
+
+    await agent.post("/handover").send({
+      lot_id: lot.id, inspected_condition: "GOOD", final_unit_price: 300,
+    });
+
+    const res = await request(app)
+      .post(`/handover/${lot.id}/confirm`)
+      .send({ handoverLat: 19.076, handoverLng: 72.877 });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("handover_photo_required");
+  });
+
+  it("400 — a queued-but-not-yet-uploaded photo does not satisfy the check", async () => {
+    const app = createApp();
+    const { account, lot } = await setupFull({ recyclerResponse: "ACKNOWLEDGED" });
+    const agent = await loginAgent(app, account.email);
+
+    await agent.post("/handover").send({
+      lot_id: lot.id, inspected_condition: "GOOD", final_unit_price: 300,
+    });
+    // Mirrors the offline-sync path (routes/sync.js photo writer): a row can
+    // exist with uploadedAt: null before the bytes ever reach POST /photos.
+    await makePhoto({ lotId: lot.id, uploadedAt: null });
+
+    const res = await request(app)
+      .post(`/handover/${lot.id}/confirm`)
+      .send({ handoverLat: 19.076, handoverLng: 72.877 });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("handover_photo_required");
+  });
+
+  it("400 — a LOT-kind photo does not satisfy the HANDOVER evidence check", async () => {
+    const app = createApp();
+    const { account, lot } = await setupFull({ recyclerResponse: "ACKNOWLEDGED" });
+    const agent = await loginAgent(app, account.email);
+
+    await agent.post("/handover").send({
+      lot_id: lot.id, inspected_condition: "GOOD", final_unit_price: 300,
+    });
+    await makePhoto({ lotId: lot.id, kind: "LOT" });
+
+    const res = await request(app)
+      .post(`/handover/${lot.id}/confirm`)
+      .send({ handoverLat: 19.076, handoverLng: 72.877 });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("handover_photo_required");
   });
 });

@@ -8,6 +8,9 @@ import { lotsRouter } from "./routes/lots.js";
 import { handoverRouter } from "./routes/handover.js";
 import { photosRouter } from "./routes/photos.js";
 import { publicRouter } from "./routes/public.js";
+import { adminRouter } from "./routes/admin.js";
+import { collectorReportsRouter } from "./routes/collectorReports.js";
+import { recyclerBadgeRouter } from "./routes/recyclerBadge.js";
 import { log } from "./lib/logger.js";
 
 // Allowed browser origins
@@ -97,6 +100,17 @@ export function createApp() {
   // aggregated per party in entityAnomaly.js. The console's manual re-check
   // now lives at POST /recycler/anomaly/recheck instead.
   app.use("/public", publicRouter);     // collector app — no auth
+  // Cross-tenant admin queue and outcome write-back (AI-ANOMALY-SPEC.md
+  // §3.3-3.4) — requireSession + requireAdmin gate every route inside.
+  app.use("/admin", adminRouter);
+  // Collector-initiated "something is wrong" reports — separate from
+  // /handover/:lot_id/dispute, which refuses once the collector has already
+  // confirmed. No auth, same as confirm/dispute.
+  app.use("/reports", collectorReportsRouter);
+  // Admin-only: list MPCB-verified recyclers and revoke/restore the green
+  // login badge (GET /auth/me → mpcbVerified) independently of the
+  // MPCB-derived authorizationStatus.
+  app.use("/recyclers", recyclerBadgeRouter);
 
   app.use((_req, res) => res.status(404).json({ error: "not_found" }));
 

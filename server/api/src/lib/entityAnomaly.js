@@ -15,14 +15,14 @@ import { log } from "./logger.js";
 // (ML_PRICE_ANOMALY, written by scoreHandover in routes/handover.js and by
 // POST /recycler/flags/check) and aggregates it per party. See AI.md §9 and
 // AI-ANOMALY-SPEC.md §0.1 for the superseded note.
-const MIN_SAMPLE_SIZE = Number(process.env.ANOMALY_MIN_SAMPLE ?? 5);
+export const MIN_SAMPLE_SIZE = Number(process.env.ANOMALY_MIN_SAMPLE ?? 5);
 
 // Share of a party's own scored transactions that must be flagged before the
 // PARTY (not just the transaction) is treated as anomalous. Configuration,
 // not code — AI-ANOMALY-SPEC.md gap #1 makes the same argument for detector
 // thresholds generally: a cutoff belongs in config so it can be retuned
 // without a deploy.
-const FLAG_RATE_THRESHOLD = Number(process.env.ANOMALY_FLAG_RATE_THRESHOLD ?? 0.2);
+export const FLAG_RATE_THRESHOLD = Number(process.env.ANOMALY_FLAG_RATE_THRESHOLD ?? 0.2);
 
 const DETECTOR_CODE = "ML_FLAG_RATE";
 

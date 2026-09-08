@@ -28,22 +28,30 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), usePat
 const { api } = await import("../src/lib/api.js");
 const FlagsPage = (await import("../src/app/(protected)/flags/page.jsx")).default;
 
+// Shape matches the real GET /recycler/flags response (routes/recycler.js) —
+// this mock used to carry description/subject/raised_at, fields the API
+// never sends, which let FlagCard.jsx render blanks for months while this
+// suite stayed green. See FlagCard.jsx's 2026-09-07 comment.
 const MOCK_FLAGS = [
   {
     id: "f1",
-    detector_code: "D1",
+    detector_code: "ML_PRICE_ANOMALY",
     severity: "WARN",
-    description: "Unusually low weight for declared category",
-    subject: "LOT-2026-001",
-    raised_at: "2026-08-25T08:00:00+05:30",
+    subject_type: "HANDOVER",
+    subject_id: "01a05ce1-09f0-7000-b21f-741df7d27cbf",
+    detail: { final_price_per_kg: 78, reference_price: 180, buyer_offer_per_kg: 170 },
+    sentence: "Paid ₹78/kg against a ₹180/kg reference — 57% below, on a buyer offer of ₹170/kg.",
+    created_at: "2026-08-25T08:00:00+05:30",
   },
   {
     id: "f2",
-    detector_code: "D9",
+    detector_code: "ML_FLAG_RATE",
     severity: "CRITICAL",
-    description: "Price agreed is more than 40% below market rate",
-    subject: "BATTERY",
-    raised_at: "2026-08-26T10:00:00+05:30",
+    subject_type: "RECYCLER",
+    subject_id: "b8789dd3-1f97-4530-9474-799bdd832e6f",
+    detail: { total: 20, flagged: 12, rate: 0.6, threshold: 0.2 },
+    sentence: "12 of this party's last 20 scored transactions were flagged by the price model (60%, over the 20% line).",
+    created_at: "2026-08-26T10:00:00+05:30",
   },
 ];
 
@@ -60,8 +68,9 @@ describe("FlagsPage", () => {
 
     expect(await screen.findByText("WARN")).toBeInTheDocument();
     expect(screen.getByText("CRITICAL")).toBeInTheDocument();
-    expect(screen.getByText("D1")).toBeInTheDocument();
-    expect(screen.getByText("D9")).toBeInTheDocument();
+    expect(screen.getByText("ML_PRICE_ANOMALY")).toBeInTheDocument();
+    expect(screen.getByText("ML_FLAG_RATE")).toBeInTheDocument();
+    expect(screen.getByText(/paid ₹78\/kg/i)).toBeInTheDocument();
   });
 
   it("shows severity badge colors — WARN is amber, CRITICAL is red", async () => {

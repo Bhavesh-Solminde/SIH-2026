@@ -34,12 +34,23 @@ export async function requireSession(req, res, next) {
       return res.status(401).json({ error: "session_expired" });
     }
 
-    req.recycler = {
-      id: session.account.recycler.id,
-      name: session.account.recycler.name,
+    // An admin account has no recyclerId (schema.prisma: recycler_account.recycler_id
+    // is nullable specifically so an admin is not forced to belong to a recycler).
+    // req.actor is the general-purpose identity every route can read; req.recycler
+    // stays exactly as it was for every existing recycler-scoped handler — null
+    // only for an admin account, which never calls a /recycler/* route.
+    const role = session.account.role ?? "RECYCLER";
+    req.actor = {
+      accountId: session.account.id,
       email: session.account.email,
+      role,
+      recyclerId: session.account.recycler?.id ?? null,
+      recyclerName: session.account.recycler?.name ?? null,
     };
-    log.auth.debug("requireSession: ok", { recycler: req.recycler.name, path: req.path });
+    req.recycler = session.account.recycler
+      ? { id: session.account.recycler.id, name: session.account.recycler.name, email: session.account.email }
+      : null;
+    log.auth.debug("requireSession: ok", { role, recycler: req.recycler?.name ?? null, path: req.path });
     return next();
   } catch (err) {
     log.auth.error("requireSession error", err);

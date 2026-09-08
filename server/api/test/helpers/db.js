@@ -7,6 +7,7 @@ export const prisma = new PrismaClient();
 // reliance on test order — a test must be able to run alone and still pass.
 const TABLES = [
   "anomaly_flag",
+  "collector_report",
   "photo",
   "handover",
   "acceptance",
@@ -115,6 +116,26 @@ export async function makeHandover({ lotId, recyclerId, ...over } = {}) {
       finalTotal: "1131.00",
       handoverTs: new Date("2026-09-02T12:40:00+05:30"),
       status: "PENDING_COLLECTOR",
+      ...over,
+    },
+  });
+}
+
+// kind defaults to "HANDOVER" and uploadedAt to "now" because the only
+// caller today is POST /handover/:lot_id/confirm's evidence-photo check
+// (routes/handover.js), which requires exactly that: an uploaded HANDOVER
+// photo for the lot. Pass uploadedAt: null to simulate a queued-but-not-yet-
+// uploaded row instead.
+export async function makePhoto({ lotId, ...over } = {}) {
+  const id = over.id ?? uuidv7();
+  return prisma.photo.create({
+    data: {
+      id,
+      lotId,
+      kind: "HANDOVER",
+      sha256: "0".repeat(64),
+      bytes: 1024,
+      uploadedAt: new Date(),
       ...over,
     },
   });

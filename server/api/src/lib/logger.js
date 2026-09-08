@@ -48,4 +48,6 @@ export const log = {
   detect:   logger('detect'),
   aiml:     logger('aiml'),
   db:       logger('db'),
+  admin:    logger('admin'),
+  report:   logger('report'),
 };

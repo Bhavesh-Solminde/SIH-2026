@@ -1,20 +1,31 @@
 import { Router } from "express";
 import { prisma } from "../db.js";
 import { requireSession } from "../middleware/requireSession.js";
-import { log, logger } from "../lib/logger.js";
+import { log } from "../lib/logger.js";
 import { referenceCodeFromUuid } from "@bhaav/core/ids";
-import { sendSms, smsEnabled } from "../lib/sms.js";
 import { callPredict } from "../lib/aiml.js";
 import { refreshEntityFlagRate } from "../lib/entityAnomaly.js";
-
-// The pre-built `log` export has no `sms` namespace — same situation
-// lib/sms.js and routes/public.js document for themselves.
-const smsLog = logger("sms");
+import { flagSentence } from "../lib/flagSentence.js";
+import { respondToAcceptance } from "../lib/acceptanceResponse.js";
 
 export const recyclerRouter = Router();
 
 // All /recycler/* routes require a session
 recyclerRouter.use(requireSession);
+
+// An admin account has a session but no recycler (req.recycler is null —
+// see middleware/requireSession.js). Every handler below reads
+// req.recycler.id unconditionally, which crashed with a 500 the first time
+// an admin session hit one of these routes instead of an admin-only one.
+// This is the only place that needs to know about it: a clean 403 here
+// means no individual handler has to null-check.
+recyclerRouter.use((req, res, next) => {
+  if (!req.recycler) {
+    log.auth.warn("recycler route hit by a non-recycler account", { path: req.path, role: req.actor?.role });
+    return res.status(403).json({ error: "recycler_account_required" });
+  }
+  return next();
+});
 
 // GET /recycler/rates — current published rates for the logged-in recycler
 recyclerRouter.get("/rates", async (req, res, next) => {
@@ -206,51 +217,14 @@ recyclerRouter.post("/acceptances/:id/respond", async (req, res, next) => {
       return res.status(409).json({ error: "already_responded" });
     }
 
-    const response = canonical === "ACCEPT" ? "ACKNOWLEDGED" : "DECLINED";
-
-    // Accepting used to update only the acceptance row, so the lot itself
-    // never left LISTED — and POST /lots/:id/depart requires status ACCEPTED
-    // before a collector can move it, so the flow dead-ended right after the
-    // recycler confirmed. Both writes commit together: a recycler must never
-    // end up "confirmed" against a lot record that still reads as unclaimed.
-    const updated = await prisma.$transaction(async (tx) => {
-      const acceptance = await tx.acceptance.update({
-        where: { id },
-        data: { recyclerResponse: response, responseTs: new Date() },
-      });
-      if (canonical === "ACCEPT") {
-        await tx.lot.update({
-          where: { id: existing.lotId },
-          data: { status: "ACCEPTED" },
-        });
-      }
-      return acceptance;
+    // Shared with GET /lots/:reference_code (routes/lots.js) — scanning the
+    // QR is the same acknowledgment as tapping Accept here, and both paths
+    // must produce identical results (see lib/acceptanceResponse.js).
+    const updated = await respondToAcceptance({
+      acceptance: existing,
+      canonical,
+      recyclerName: req.recycler.name,
     });
-
-    // Collector notification. Optional by construction: no contact row, no
-    // message, no behaviour change — README ground rule 7 permits an
-    // optional phone, never a mandatory one. The contact lookup is a local
-    // DB read and is awaited; the outbound Fast2SMS call is the third-party
-    // network hop, and THAT is fired after the update commits and never
-    // awaited — a Fast2SMS outage or timeout must never cost a recycler
-    // their recorded response.
-    if (smsEnabled()) {
-      const lot = existing.lot;
-      const contact = await prisma.collectorContact.findUnique({ where: { collectorId: lot.collectorId } });
-      if (contact) {
-        const referenceCode = referenceCodeFromUuid(lot.id);
-        const message = canonical === "ACCEPT"
-          ? `Bhaav: ${req.recycler.name} confirmed your lot. ${lot.category?.code ?? ""} ${Number(lot.quantity)}${String(lot.unit).toLowerCase()}, ref ${referenceCode}. They are expecting you.`
-          : `Bhaav: ${req.recycler.name} declined lot ${referenceCode}. Open the app to pick another recycler.`;
-        void sendSms({ numbers: contact.phone, message })
-          .then((result) => {
-            if (!result.ok) smsLog.warn("collector notify not sent", { acceptanceId: id, reason: result.reason });
-          })
-          .catch((err) => {
-            smsLog.warn("collector notify failed", { acceptanceId: id, reason: err?.message });
-          });
-      }
-    }
 
     return res.json({
       id: updated.id,
@@ -576,6 +550,7 @@ recyclerRouter.get("/flags", async (req, res, next) => {
         detector_code: f.detectorCode,
         severity: f.severity,
         detail: f.detail,
+        sentence: flagSentence(f),
         created_at: f.createdAt.toISOString(),
       })),
     );

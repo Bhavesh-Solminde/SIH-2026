@@ -26,7 +26,12 @@ import { loadReference, rateAgeDays } from '../db/repos/reference';
 const DATE_LOCALE = { mr: 'mr-IN', hi: 'hi-IN', en: 'en-IN' };
 
 export default function PriceBoardScreen({ db, apiUrl }) {
-  const API_BASE = apiUrl ?? 'http://192.168.0.102:4000';
+  // No hardcoded LAN IP fallback: App.js already derives the host from the
+  // Expo dev-server address precisely so this never goes stale, and the IP
+  // that used to sit here (192.168.0.102) is already dead — DHCP moved this
+  // machine to a different address. A stale fallback fails silently and
+  // looks exactly like the server being down, so prefer no fallback at all.
+  const API_BASE = apiUrl;
   const t = useStrings();
   const { speak } = useVoice();
   const { lang } = useLanguage();

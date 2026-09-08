@@ -55,6 +55,13 @@ model Recycler {
   registrationNo      String    @unique @map("registration_no")
   validityTo          DateTime? @map("validity_to") @db.Date
   authorizationStatus String    @map("authorization_status")
+  // Independent of authorizationStatus, which is only ever set by
+  // mpcb-refresh.js from the MPCB register — the two answer different
+  // questions. A recycler can be VALID on the MPCB list and still have this
+  // set true if an admin has revoked the trust badge after an anomaly; a
+  // later MPCB refresh does not touch this field, so a revoked badge stays
+  // revoked until an admin restores it, not until the next CSV import.
+  trustBadgeRevoked   Boolean   @default(false) @map("trust_badge_revoked")
   district            String?
   phone               String?
   email               String?
@@ -219,9 +226,31 @@ model Handover {
 
   lot      Lot      @relation(fields: [lotId], references: [id])
   recycler Recycler @relation(fields: [recyclerId], references: [id])
+  reports  CollectorReport[]
 
   @@index([recyclerId, handoverTs(sort: Desc)], map: "handover_by_recy")
   @@map("handover")
+}
+
+// A collector-initiated "something is wrong" report, filed from the Earnings
+// history screen against an ALREADY-CONFIRMED (or any other status)
+// transaction. Deliberately separate from AnomalyFlag (the ML pipeline's
+// output) and from Handover.dispute (which POST /handover/:lot_id/dispute
+// refuses once collectorConfirmedAt is set — "a later protest is a different
+// record", per that route's own comment). This IS that different record.
+// No admin read/write surface yet — reachable via
+// `prisma.collectorReport.findMany()` whenever the admin panel wants it.
+model CollectorReport {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  handoverId String   @map("handover_id") @db.Uuid
+  reason     String
+  status     String   @default("OPEN") // OPEN | REVIEWED
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  handover Handover @relation(fields: [handoverId], references: [id])
+
+  @@index([handoverId])
+  @@map("collector_report")
 }
 
 // DB.md 3.8 — uploaded_at NULL is normal, not an error.
@@ -260,6 +289,12 @@ model AnomalyFlag {
   resolvedAt    DateTime? @map("resolved_at") @db.Timestamptz(6)
 
   @@index([subjectType, subjectId], map: "flag_by_subject")
+  // The admin queue (routes/admin.js) reads globally across every subject,
+  // filtered by open/resolved and severity, newest first — flag_by_subject
+  // alone doesn't serve that. detectorCode gets its own index for the
+  // per-detector filter on the same queue.
+  @@index([resolvedAt, severity, createdAt(sort: Desc)], map: "flag_open")
+  @@index([detectorCode], map: "flag_detector")
   @@map("anomaly_flag")
 }
 
@@ -268,12 +303,19 @@ model AnomalyFlag {
 // touch no existing column. See the index plan, amendment 4.
 model RecyclerAccount {
   id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  recyclerId   String   @map("recycler_id") @db.Uuid
+  // Nullable so an ADMIN account is not forced to belong to a recycler — see
+  // migration add_admin_role_and_flag_indexes. Every existing RECYCLER account
+  // keeps a non-null recyclerId; only role: 'ADMIN' accounts have it null.
+  recyclerId   String?  @map("recycler_id") @db.Uuid
   email        String   @unique
   passwordHash String   @map("password_hash")
+  // 'RECYCLER' | 'ADMIN' — CHECK constraint in the same migration. The first
+  // privileged actor in this system; there is no broader RBAC (see
+  // middleware/requireSession.js and requireAdmin.js).
+  role         String   @default("RECYCLER")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  recycler Recycler          @relation(fields: [recyclerId], references: [id])
+  recycler Recycler?         @relation(fields: [recyclerId], references: [id])
   sessions RecyclerSession[]
 
   @@map("recycler_account")

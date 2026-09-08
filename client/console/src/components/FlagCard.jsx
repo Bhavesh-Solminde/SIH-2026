@@ -6,6 +6,16 @@ import Icon from "./Icon.jsx";
 // 2026-09-06 repair-sms-and-evidence pass). No behaviour change: the
 // severity badge and the plain-language line are unchanged from the inline
 // version — only the surrounding <li> per flag is now this component.
+//
+// Fixed 2026-09-07: this used to read flag.description/.subject/.raised_at,
+// a shape GET /recycler/flags never actually returns (it returns detail,
+// subject_type/subject_id, created_at — see routes/recycler.js) — every one
+// of those three rendered blank. test/flags.test.jsx mocked the old shape
+// too, so the suite stayed green while the real page rendered nothing. Both
+// are now pointed at the real contract: the server computes the
+// plain-language line itself (lib/flagSentence.js) and sends it as
+// `sentence`, so this component and the admin queue always agree on the
+// wording for the same detector.
 
 // Colors unchanged from the original inline SEVERITY_STYLES (test/flags.test.jsx
 // pins these exact values) — only the icon is new, to make WARN vs CRITICAL
@@ -38,9 +48,9 @@ export default function FlagCard({ flag }) {
         {flag.severity}
       </span>{" "}
       <strong>{flag.detector_code}</strong>{" "}
-      <span>{flag.description}</span>{" "}
-      <span>· {flag.subject}</span>{" "}
-      <span>· {shortDate(flag.raised_at ?? flag.date)}</span>
+      <span>{flag.sentence}</span>{" "}
+      <span>· {flag.subject_type} {flag.subject_id?.slice(0, 8)}</span>{" "}
+      <span>· {shortDate(flag.created_at)}</span>
     </li>
   );
 }
